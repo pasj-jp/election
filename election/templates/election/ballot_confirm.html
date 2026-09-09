@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>投票内容確認</title>
+</head>
+
+<body>
+
+<h1>投票内容の確認</h1>
+
+<p>
+    {{ election }}
+</p>
+
+<p>
+    以下の候補者を選択しています。
+</p>
+
+<ul>
+
+{% for candidate in candidates %}
+
+    <li>
+        {{ candidate.member.last_name }}
+        {{ candidate.member.first_name }}
+
+        {% if candidate.member.representative_category == "corporate" %}
+            【企業枠】
+        {% else %}
+            【一般枠】
+        {% endif %}
+
+        {% if candidate.member.affiliation %}
+            -
+            {{ candidate.member.affiliation }}
+        {% endif %}
+    </li>
+
+{% endfor %}
+
+</ul>
+
+<p>
+    選択人数:
+    {{ candidates|length }} 名
+</p>
+
+
+<form
+    method="post"
+    action="{% url 'election:ballot_submit' %}"
+>
+
+    {% csrf_token %}
+
+    <button type="submit">
+        この内容で投票する
+    </button>
+
+</form>
+
+
+<p>
+    <a href="{% url 'election:ballot' %}">
+        選択画面へ戻る
+    </a>
+</p>
+
+</body>
+</html>

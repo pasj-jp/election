@@ -1,0 +1,131 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+
+<h1>
+    抽選プレビュー
+</h1>
+
+<div class="module">
+
+    <h2>抽選条件</h2>
+
+    <div style="padding:16px;">
+
+        <p>
+            <strong>選挙:</strong>
+            {{ lottery.election }}
+        </p>
+
+        <p>
+            <strong>枠:</strong>
+            {{ lottery.get_category_display }}
+        </p>
+
+        <p>
+            <strong>境界得票:</strong>
+            {{ lottery.vote_count }} 票
+        </p>
+
+        <p>
+            <strong>残議席:</strong>
+            {{ lottery.seats_remaining }}
+        </p>
+
+        <p>
+            <strong>抽選対象者:</strong>
+            {{ preview.candidate_count }} 名
+        </p>
+
+    </div>
+
+</div>
+
+
+<div class="module">
+
+    <h2>抽選対象者</h2>
+
+    <table>
+
+        <thead>
+            <tr>
+                <th>会員番号</th>
+                <th>氏名</th>
+                <th>所属</th>
+                <th>得票</th>
+            </tr>
+        </thead>
+
+        <tbody>
+
+        {% for row in preview.candidates %}
+
+            <tr>
+                <td>
+                    {{ row.candidate.member.member_no }}
+                </td>
+
+                <td>
+                    {{ row.candidate.member.last_name }}
+                    {{ row.candidate.member.first_name }}
+                </td>
+
+                <td>
+                    {{ row.candidate.member.affiliation }}
+                </td>
+
+                <td>
+                    {{ lottery.vote_count }}
+                </td>
+            </tr>
+
+        {% endfor %}
+
+        </tbody>
+
+    </table>
+
+</div>
+
+
+<div class="submit-row">
+
+    <form
+        method="post"
+        action="{% url 'admin:election_lotterydraw_execute' lottery.pk %}"
+    >
+
+        {% csrf_token %}
+
+        <input
+            type="submit"
+            value="この条件で抽選を実行"
+            class="default"
+        >
+
+    </form>
+
+    <a
+        href="{% url 'admin:election_lotterydraw_change' lottery.pk %}"
+        class="button"
+    >
+        キャンセル
+    </a>
+
+</div>
+
+
+<p style="
+    margin-top:20px;
+    color:#ba2121;
+">
+
+    <strong>注意:</strong>
+
+    抽選を実行すると結果が確定し、
+    同じ抽選を再実行することはできません。
+
+</p>
+
+{% endblock %}

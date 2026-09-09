@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>投票エラー</title>
+</head>
+
+<body>
+
+<h1>投票内容を確認してください</h1>
+
+<p>
+    {{ message }}
+</p>
+
+<p>
+    <a href="{% url 'election:ballot' %}">
+        投票画面へ戻る
+    </a>
+</p>
+
+</body>
+</html>

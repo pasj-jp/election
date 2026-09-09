@@ -1,0 +1,8 @@
+asgiref==3.12.1
+Django==6.0.8
+ldap3==2.9.1
+psycopg==3.3.5
+psycopg-binary==3.3.5
+pyasn1==0.6.4
+sqlparse==0.6.0
+typing_extensions==4.16.0

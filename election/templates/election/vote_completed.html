@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>投票完了</title>
+</head>
+
+<body>
+
+<h1>投票を受け付けました</h1>
+
+<p>
+    {{ election }}
+</p>
+
+<p>
+    投票は正常に受け付けられました。
+</p>
+
+<p>
+    受付日時:
+    {{ submitted_at|date:"Y年m月d日 H:i:s" }}
+</p>
+
+<p>
+    この投票URLから再度投票することはできません。
+</p>
+
+</body>
+</html>

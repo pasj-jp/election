@@ -1,0 +1,354 @@
+{% extends "admin/base_site.html" %}
+
+{% load i18n admin_urls %}
+
+
+{% block content %}
+
+<h1>
+    {{ election }}
+    - 開票プレビュー
+</h1>
+
+
+<div class="module">
+
+    <h2>投票状況</h2>
+
+    <div style="padding:16px;">
+
+        <p>
+            <strong>Ballot数:</strong>
+            {{ preview.ballot_count }}
+        </p>
+
+    </div>
+
+</div>
+
+
+<div class="module">
+
+    <h2>一般枠</h2>
+
+    <div style="padding:16px;">
+
+        <p>
+            定数:
+            {{ preview.general.seats }}
+        </p>
+
+        <p>
+            確定当選:
+            {{ preview.general.winners|length }}
+            名
+        </p>
+
+        {% if preview.general.lottery_required %}
+
+            <p style="color:#ba2121;">
+                <strong>
+                    ⚠ 抽選が必要です
+                </strong>
+            </p>
+
+            <p>
+                境界得票:
+                {{ preview.general.boundary_vote }}
+            </p>
+
+            <p>
+                残議席:
+                {{ preview.general.remaining_seats }}
+            </p>
+
+            <p>
+                抽選対象:
+                {{ preview.general.tied|length }}
+                名
+            </p>
+
+        {% endif %}
+
+
+        <h3>確定当選者</h3>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>会員番号</th>
+                    <th>氏名</th>
+                    <th>所属</th>
+                    <th>得票</th>
+                </tr>
+            </thead>
+
+            <tbody>
+
+            {% for candidate in preview.general.winners %}
+
+                <tr>
+                    <td>
+                        {{ candidate.member.member_no }}
+                    </td>
+
+                    <td>
+                        {{ candidate.member.last_name }}
+                        {{ candidate.member.first_name }}
+                    </td>
+
+                    <td>
+                        {{ candidate.member.affiliation }}
+                    </td>
+
+                    <td>
+                        {{ candidate.vote_count }}
+                    </td>
+                </tr>
+
+            {% empty %}
+
+                <tr>
+                    <td colspan="4">
+                        確定当選者はいません。
+                    </td>
+                </tr>
+
+            {% endfor %}
+
+            </tbody>
+        </table>
+
+
+        {% if preview.general.tied %}
+
+            <h3>抽選対象者</h3>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>会員番号</th>
+                        <th>氏名</th>
+                        <th>所属</th>
+                        <th>得票</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                {% for candidate in preview.general.tied %}
+
+                    <tr>
+                        <td>
+                            {{ candidate.member.member_no }}
+                        </td>
+
+                        <td>
+                            {{ candidate.member.last_name }}
+                            {{ candidate.member.first_name }}
+                        </td>
+
+                        <td>
+                            {{ candidate.member.affiliation }}
+                        </td>
+
+                        <td>
+                            {{ candidate.vote_count }}
+                        </td>
+                    </tr>
+
+                {% endfor %}
+
+                </tbody>
+            </table>
+
+        {% endif %}
+
+    </div>
+
+</div>
+
+
+<div class="module">
+
+    <h2>企業枠</h2>
+
+    <div style="padding:16px;">
+
+        <p>
+            定数:
+            {{ preview.corporate.seats }}
+        </p>
+
+        <p>
+            確定当選:
+            {{ preview.corporate.winners|length }}
+            名
+        </p>
+
+        {% if preview.corporate.lottery_required %}
+
+            <p style="color:#ba2121;">
+                <strong>
+                    ⚠ 抽選が必要です
+                </strong>
+            </p>
+
+            <p>
+                境界得票:
+                {{ preview.corporate.boundary_vote }}
+            </p>
+
+            <p>
+                残議席:
+                {{ preview.corporate.remaining_seats }}
+            </p>
+
+            <p>
+                抽選対象:
+                {{ preview.corporate.tied|length }}
+                名
+            </p>
+
+        {% endif %}
+
+
+        <h3>確定当選者</h3>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>会員番号</th>
+                    <th>氏名</th>
+                    <th>所属</th>
+                    <th>得票</th>
+                </tr>
+            </thead>
+
+            <tbody>
+
+            {% for candidate in preview.corporate.winners %}
+
+                <tr>
+                    <td>
+                        {{ candidate.member.member_no }}
+                    </td>
+
+                    <td>
+                        {{ candidate.member.last_name }}
+                        {{ candidate.member.first_name }}
+                    </td>
+
+                    <td>
+                        {{ candidate.member.affiliation }}
+                    </td>
+
+                    <td>
+                        {{ candidate.vote_count }}
+                    </td>
+                </tr>
+
+            {% empty %}
+
+                <tr>
+                    <td colspan="4">
+                        確定当選者はいません。
+                    </td>
+                </tr>
+
+            {% endfor %}
+
+            </tbody>
+        </table>
+
+
+        {% if preview.corporate.tied %}
+
+            <h3>抽選対象者</h3>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>会員番号</th>
+                        <th>氏名</th>
+                        <th>所属</th>
+                        <th>得票</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                {% for candidate in preview.corporate.tied %}
+
+                    <tr>
+                        <td>
+                            {{ candidate.member.member_no }}
+                        </td>
+
+                        <td>
+                            {{ candidate.member.last_name }}
+                            {{ candidate.member.first_name }}
+                        </td>
+
+                        <td>
+                            {{ candidate.member.affiliation }}
+                        </td>
+
+                        <td>
+                            {{ candidate.vote_count }}
+                        </td>
+                    </tr>
+
+                {% endfor %}
+
+                </tbody>
+            </table>
+
+        {% endif %}
+
+    </div>
+
+</div>
+
+
+<div class="submit-row">
+
+    <form
+        method="post"
+        action="{% url 'admin:election_election_count_confirm' election.pk %}"
+    >
+
+        {% csrf_token %}
+
+        <input
+            type="submit"
+            value="この内容で開票を確定"
+            class="default"
+        >
+
+    </form>
+
+
+    <a
+        href="{% url 'admin:election_election_change' election.pk %}"
+        class="button"
+    >
+        キャンセル
+    </a>
+
+</div>
+
+
+<p style="
+    margin-top:20px;
+    color:#ba2121;
+">
+
+    <strong>注意:</strong>
+
+    「開票を確定」を実行すると、
+    候補者の当選・落選・抽選対象状態がDBへ保存されます。
+
+</p>
+
+{% endblock %}

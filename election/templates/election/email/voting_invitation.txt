@@ -1,0 +1,22 @@
+{{ member.last_name }} {{ member.first_name }} 様
+
+日本加速器学会 選挙のご案内です。
+
+以下のURLから投票してください。
+
+{{ voting_url }}
+
+選挙：
+{{ election }}
+
+投票期間：
+{{ election.start_at|date:"Y年m月d日 H:i" }}
+～
+{{ election.end_at|date:"Y年m月d日 H:i" }}
+
+このURLは会員ごとに異なる固有URLです。
+他の方への転送・共有は行わないでください。
+
+投票完了後、このURLから再度投票することはできません。
+
+一般社団法人 日本加速器学会
