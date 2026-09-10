@@ -3,6 +3,11 @@
 AlmaLinux、`/opt/election`、Nginx、Gunicorn、systemdを前提とします。
 ドメイン、証明書パス、ユーザー名は実環境に合わせて変更してください。
 
+同じ構成を自動化するAnsible Playbookは
+[`../ansible/README.md`](../ansible/README.md) を参照してください。
+Ansible版ではGitHub Releaseからバージョン指定で取得し、バージョン別ディレクトリへ
+展開してから `current` シンボリックリンクを切り替えます。
+
 ## 1. 初回準備
 
 ```bash

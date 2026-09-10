@@ -68,13 +68,21 @@ jobs:
           echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
           echo "prerelease=${prerelease}" >> "${GITHUB_OUTPUT}"
 
-      - name: Create GitHub Release
+      - name: Build and publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ steps.release.outputs.tag }}
           PRERELEASE: ${{ steps.release.outputs.prerelease }}
         run: |
           set -Eeuo pipefail
+
+          archive="election-${TAG_NAME}.tar.gz"
+          git archive \
+            --format=tar \
+            --prefix="election-${TAG_NAME}/" \
+            "${TAG_NAME}" \
+            | gzip -n > "${archive}"
+          sha256sum "${archive}" > "${archive}.sha256"
 
           args=(
             "${TAG_NAME}"
@@ -87,4 +95,15 @@ jobs:
             args+=(--prerelease)
           fi
 
-          gh release create "${args[@]}"
+          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
+            # 既存Releaseへ配布ファイルを追加する。既存assetは上書きしない。
+            gh release upload \
+              "${TAG_NAME}" \
+              "${archive}" \
+              "${archive}.sha256"
+          else
+            gh release create \
+              "${args[@]}" \
+              "${archive}" \
+              "${archive}.sha256"
+          fi
