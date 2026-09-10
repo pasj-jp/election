@@ -15,6 +15,9 @@
 
 CUI の Django management command は、初期設定、データ生成、メール送信、開票、抽選、障害対応、監査用途として残します。
 
+本番環境の初回構築・更新手順と設定ひな型は
+[`deploy/README.md`](deploy/README.md) を参照してください。
+
 ---
 
 # 1. 対応する選挙
@@ -1339,14 +1342,7 @@ GUI抽選実行
 主な残作業:
 
 ```text
-settings.py 本番化
-環境変数整理
-SECRET_KEY環境変数化
-Gunicorn
-systemd
-nginx
 TLS
-static files
 SMTP本番設定
 管理者アクセス制限
 ログ設定

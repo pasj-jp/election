@@ -6,6 +6,7 @@ __pycache__/
 # Django
 db.sqlite3
 *.log
+staticfiles/
 
 # Environment / secrets
 .env
