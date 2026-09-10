@@ -6,10 +6,14 @@ __pycache__/
 # Django
 db.sqlite3
 *.log
+staticfiles/
 
 # Environment / secrets
 .env
 *.env
+ansible/inventory.yml
+ansible/vars/production.yml
+ansible/*.retry
 
 # Virtual environment
 .venv/
@@ -32,3 +36,4 @@ htmlcov/
 private/
 results/
 *.csv
+*.xlsx

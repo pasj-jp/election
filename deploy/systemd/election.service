@@ -1,0 +1,31 @@
+[Unit]
+Description=PASJ Election Gunicorn service
+After=network.target postgresql.service
+Wants=network.target
+
+[Service]
+Type=notify
+User=election
+Group=nginx
+WorkingDirectory=/opt/election/src
+EnvironmentFile=/opt/election/etc/election.env
+Environment=DJANGO_SETTINGS_MODULE=config.settings.production
+RuntimeDirectory=election
+RuntimeDirectoryMode=0750
+UMask=0007
+ExecStart=/opt/election/.venv/bin/gunicorn \
+    --workers 3 \
+    --timeout 60 \
+    --bind unix:/run/election/gunicorn.sock \
+    config.wsgi:application
+ExecReload=/bin/kill -s HUP $MAINPID
+KillSignal=SIGQUIT
+TimeoutStopSec=30
+PrivateTmp=true
+ProtectSystem=full
+NoNewPrivileges=true
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
