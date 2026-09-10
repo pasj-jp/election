@@ -87,7 +87,7 @@ class MemberSnapshot(models.Model):
     """
     選挙開始時点の会員情報のスナップショット。
 
-    LDAPの内容をそのまま参照し続けるのではなく、
+    元の会員名簿をそのまま参照し続けるのではなく、
     選挙時点の情報を固定するためのテーブル。
     """
 
@@ -157,7 +157,7 @@ class Candidate(models.Model):
     """
     各選挙の候補者。
 
-    MemberSnapshotを参照するので、LDAP変更の影響を受けない。
+    MemberSnapshotを参照するので、元の名簿変更の影響を受けない。
     """
 
     class Status(models.TextChoices):

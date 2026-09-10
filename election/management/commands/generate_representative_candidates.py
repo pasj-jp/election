@@ -57,7 +57,7 @@ class Command(BaseCommand):
         if total == 0:
             raise CommandError(
                 "推薦対象となる正会員が0名です。"
-                "先にLDAP同期を実行してください。"
+                "先に会員名簿CSVを取り込んでください。"
             )
 
         corporate_count = members.filter(

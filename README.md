@@ -2,7 +2,7 @@
 
 日本加速器学会（PASJ）の会長選挙・代議員選挙を実施するための Django ベースの選挙システムです。
 
-本システムでは、389 Directory Server（LDAP）に登録された学会員情報を利用して、有権者・候補者を生成し、メールで配布した会員固有の投票 URL から投票を行います。
+本システムでは、Excelから出力した会員名簿CSVをPostgreSQLへ取り込み、有権者・候補者を生成し、メールで配布した会員固有の投票 URL から投票を行います。
 
 投票者情報と投票内容はデータベース上で分離し、
 
@@ -71,10 +71,10 @@ GitHub Actionsの画面から、既存タグを指定して手動実行するこ
 * 企業枠: 5名
 * 合計: 30名
 
-企業枠は LDAP の
+企業枠は名簿CSVの「所属」が
 
 ```text
-businessCategory = 企業関係
+企業関係
 ```
 
 で判定します。
@@ -91,8 +91,6 @@ businessCategory = 企業関係
 * Python 3.12
 * Django 6.0
 * PostgreSQL
-* 389 Directory Server
-* ldap3
 * SMTP
 * Gunicorn
 * nginx
@@ -218,36 +216,29 @@ sudo -E -u election \
 
 ---
 
-# 7. LDAP同期
+# 7. 会員名簿CSV取り込み
 
-LDAP:
+Excel名簿をCSV UTF-8形式で保存し、次の列を取り込みます。
 
-```text
-ou=people,dc=pasj,dc=jp
-```
-
-LDAP属性との対応:
-
-| LDAP               | Django              | 用途    |
-| ------------------ | ------------------- | ----- |
-| `uid`              | `member_no`         | 会員番号  |
-| `sn`               | `last_name`         | 姓     |
-| `givenName`        | `first_name`        | 名     |
-| `mail`             | `email`             | メール   |
-| `employeeType`     | `employee_type`     | 会員種別  |
-| `businessCategory` | `business_category` | 企業枠判定 |
-| `o`                | `affiliation`       | 所属機関  |
+| CSV列 | Django | 用途 |
+| --- | --- | --- |
+| `会員番号` | `member_no` | 会員番号 |
+| `会員名` | `last_name`, `first_name` | 氏名 |
+| `会員種別` | `employee_type` | 選挙権判定 |
+| `所属` | `business_category` | 企業枠判定 |
+| `所属所属機関名` | `affiliation` | 所属機関 |
+| `ＭＬ用メールアドレス` | `email` | 投票メール送信先 |
 
 正会員判定:
 
 ```text
-employeeType.startswith("正会員")
+会員種別.startswith("正会員")
 ```
 
 企業枠判定:
 
 ```text
-businessCategory == "企業関係"
+所属 == "企業関係"
 ```
 
 Dry-run:
@@ -255,8 +246,9 @@ Dry-run:
 ```bash
 sudo -E -u election \
   /opt/election/.venv/bin/python manage.py \
-  sync_ldap_members \
+  import_members_csv \
   --cycle 2027 \
+  --file /安全な保存先/修正_20260805名簿.csv \
   --dry-run
 ```
 
@@ -265,8 +257,9 @@ sudo -E -u election \
 ```bash
 sudo -E -u election \
   /opt/election/.venv/bin/python manage.py \
-  sync_ldap_members \
-  --cycle 2027
+  import_members_csv \
+  --cycle 2027 \
+  --file /安全な保存先/修正_20260805名簿.csv
 ```
 
 ---
@@ -1135,7 +1128,7 @@ CUI:
 
 ```text
 Management Commands
-├── LDAP同期
+├── 会員名簿CSV取り込み
 ├── 候補者生成
 ├── 有権者生成
 ├── token生成
@@ -1212,7 +1205,6 @@ results/
 
 * Django SECRET_KEY
 * PostgreSQL password
-* LDAP password
 * SMTP password
 * 生token
 * 有効な投票URL
@@ -1240,8 +1232,6 @@ Gunicorn
 Django
    |
    +-- PostgreSQL
-   |
-   +-- 389 Directory Server
    |
    +-- SMTP
 ```
@@ -1318,7 +1308,7 @@ token認証後は303 redirectし、通常の投票画面ではtokenをURLに残�
 実装済み:
 
 ```text
-LDAP同期
+会員名簿CSV取り込み
 MemberSnapshot
 候補者生成
 有権者生成
@@ -1368,7 +1358,7 @@ tokenログ対策
 会長予備選挙 GUI開票
 会長本選挙 GUI開票
 メール送信 GUI
-LDAP同期 GUI
+会員名簿取り込み GUI
 選挙作成ウィザード
 ```
 
@@ -1379,7 +1369,7 @@ LDAP同期 GUI
 # 51. 基本運用イメージ
 
 ```text
-LDAP同期
+会員名簿CSV取り込み
    ↓
 ElectionCycle作成
    ↓

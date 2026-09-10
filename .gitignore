@@ -33,3 +33,4 @@ htmlcov/
 private/
 results/
 *.csv
+*.xlsx
