@@ -1,0 +1,90 @@
+name: Create GitHub Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "リリースする既存タグ（例: v1.0.0）"
+        required: true
+        type: string
+      prerelease:
+        description: "プレリリースとして公開する"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Create release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select release tag
+        id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_TAG: ${{ github.ref_name }}
+          MANUAL_TAG: ${{ inputs.tag }}
+          MANUAL_PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -Eeuo pipefail
+
+          if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
+            tag="${MANUAL_TAG}"
+            prerelease="${MANUAL_PRERELEASE}"
+          else
+            tag="${PUSH_TAG}"
+            prerelease="false"
+            if [[ "${tag}" == *-* ]]; then
+              prerelease="true"
+            fi
+          fi
+
+          if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "タグ形式が不正です: ${tag}" >&2
+            exit 1
+          fi
+
+          if ! git rev-parse --verify --quiet "refs/tags/${tag}"; then
+            echo "リポジトリにタグが存在しません: ${tag}" >&2
+            exit 1
+          fi
+
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=${prerelease}" >> "${GITHUB_OUTPUT}"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ steps.release.outputs.tag }}
+          PRERELEASE: ${{ steps.release.outputs.prerelease }}
+        run: |
+          set -Eeuo pipefail
+
+          args=(
+            "${TAG_NAME}"
+            --verify-tag
+            --title "${TAG_NAME}"
+            --generate-notes
+          )
+
+          if [[ "${PRERELEASE}" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+
+          gh release create "${args[@]}"

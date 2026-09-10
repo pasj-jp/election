@@ -18,6 +18,17 @@ CUI の Django management command は、初期設定、データ生成、メー�
 本番環境の初回構築・更新手順と設定ひな型は
 [`deploy/README.md`](deploy/README.md) を参照してください。
 
+GitHub Releaseは、Semantic Versioning形式のタグをpushすると
+`.github/workflows/release.yml` により自動作成されます。
+
+```bash
+git tag -a v1.0.0 -m "Release v1.0.0"
+git push origin v1.0.0
+```
+
+`v1.0.0-rc.1` のようにハイフンを含むタグはプレリリースになります。
+GitHub Actionsの画面から、既存タグを指定して手動実行することもできます。
+
 ---
 
 # 1. 対応する選挙
