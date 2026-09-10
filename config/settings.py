@@ -17,16 +17,56 @@ import os
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-# Quick-start development settings - unsuitable for production
+# Production settings
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-g&6263&s@4co9vnvp$!v(ovdyomqgc$4p_nwhne^n4i&y*f%x='
+# 本番用の秘密鍵はソースコードに保存せず、環境変数から取得する。
+# 未設定のまま起動した場合は、安全のため起動時にエラーにする。
+SECRET_KEY = os.environ["ELECTION_SECRET_KEY"]
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = []
+# カンマ区切りで指定する（例: vote.example.jp,www.vote.example.jp）。
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.environ["ELECTION_ALLOWED_HOSTS"].split(",")
+    if host.strip()
+]
+
+# Nginxが付与するX-Forwarded-Protoを使用して、Djangoにもとの通信が
+# HTTPSだったことを伝える。Nginx側でこのヘッダーを必ず上書きすること。
+SECURE_PROXY_SSL_HEADER = (
+    "HTTP_X_FORWARDED_PROTO",
+    "https",
+)
+
+SECURE_SSL_REDIRECT = True
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+
+# HTTPSでの運用をブラウザに記憶させる。最初は短い値で確認し、
+# 安定運用後に31536000（1年）などへ延ばすこともできる。
+SECURE_HSTS_SECONDS = int(
+    os.environ.get(
+        "ELECTION_SECURE_HSTS_SECONDS",
+        "3600",
+    )
+)
+
+# 別名ホストなどからPOSTを受ける場合に、HTTPS Originをカンマ区切りで
+# 指定する（例: https://vote.example.jp）。通常の同一ホストだけなら空でよい。
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get(
+        "ELECTION_CSRF_TRUSTED_ORIGINS",
+        "",
+    ).split(",")
+    if origin.strip()
+]
+
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+X_FRAME_OPTIONS = "DENY"
 
 
 # Application definition
@@ -119,7 +159,8 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
