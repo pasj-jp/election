@@ -66,6 +66,18 @@ sudo journalctl -u election.service -n 100 --no-pager
 curl -I https://vote.pasj.jp/admin/login/
 ```
 
+初回のデプロイ時にsuperuserを作る必要があります。
+
+```bash
+sudo -u election bash -c '
+  set -a
+  source /opt/election/etc/election.env
+  set +a
+  cd /opt/election/current
+  /opt/election/.venv/bin/python manage.py createsuperuser
+'
+```
+
 ## 4. 通常の更新
 
 1. PostgreSQLのバックアップを取得する
