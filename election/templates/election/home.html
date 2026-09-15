@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>加速器学会選挙システム</title>
+    <style>
+        :root {
+            color-scheme: light;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                "Noto Sans JP", sans-serif;
+            color: #25313c;
+            background: #eef3f7;
+        }
+        * { box-sizing: border-box; }
+        body {
+            min-height: 100vh;
+            margin: 0;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+        }
+        main {
+            width: min(680px, 100%);
+            padding: clamp(32px, 7vw, 64px);
+            background: #fff;
+            border-top: 5px solid #246b8f;
+            border-radius: 8px;
+            box-shadow: 0 16px 40px rgba(27, 55, 72, 0.12);
+        }
+        h1 {
+            margin: 0 0 24px;
+            color: #174e6b;
+            font-size: clamp(1.65rem, 5vw, 2.35rem);
+            line-height: 1.35;
+        }
+        p { margin: 0 0 16px; line-height: 1.85; }
+        .notice {
+            margin: 28px 0;
+            padding: 18px 20px;
+            background: #f2f7fa;
+            border-left: 4px solid #4e91b3;
+        }
+        .admin-link {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 11px 20px;
+            color: #fff;
+            background: #246b8f;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .admin-link:hover { background: #174e6b; }
+    </style>
+</head>
+<body>
+<main>
+    <h1>加速器学会選挙システム</h1>
+    <p>
+        日本加速器学会の会長選挙・代議員選挙を行うためのシステムです。
+    </p>
+    <div class="notice">
+        <p>
+            投票される方は、選挙案内メールに記載された専用URLから
+            投票ページへアクセスしてください。
+        </p>
+        <p>
+            専用URLは他の方と共有しないでください。
+        </p>
+    </div>
+    <a class="admin-link" href="{% url 'admin:index' %}">
+        選挙管理者ログイン
+    </a>
+</main>
+</body>
+</html>

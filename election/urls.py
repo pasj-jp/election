@@ -7,6 +7,11 @@ app_name = "election"
 
 urlpatterns = [
     path(
+        "",
+        views.home,
+        name="home",
+    ),
+    path(
         "v/<str:token>/",
         views.vote_entry,
         name="vote_entry",

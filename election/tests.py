@@ -1,8 +1,25 @@
 from django.contrib import admin
 from django.test import SimpleTestCase
+from django.urls import reverse
 
 from .admin import CandidateAdmin
 from .models import Candidate, Election
+
+
+class HomeViewTest(SimpleTestCase):
+
+    def test_home_page_is_displayed(self):
+        response = self.client.get(reverse("election:home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "加速器学会選挙システム",
+        )
+        self.assertContains(
+            response,
+            reverse("admin:index"),
+        )
 
 
 class CandidateAdminTest(SimpleTestCase):
