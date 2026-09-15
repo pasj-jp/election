@@ -14,6 +14,8 @@ class ElectionCycle(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        verbose_name = "選挙年度"
+        verbose_name_plural = "選挙年度"
         ordering = ["-year"]
 
     def __str__(self):
@@ -67,6 +69,8 @@ class Election(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        verbose_name = "選挙"
+        verbose_name_plural = "選挙"
         constraints = [
             models.UniqueConstraint(
                 fields=["cycle", "office", "phase"],
@@ -141,6 +145,8 @@ class MemberSnapshot(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        verbose_name = "会員リスト"
+        verbose_name_plural = "会員リスト"
         constraints = [
             models.UniqueConstraint(
                 fields=["cycle", "member_no"],
@@ -192,6 +198,8 @@ class Candidate(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        verbose_name = "候補者"
+        verbose_name_plural = "候補者"
         constraints = [
             models.UniqueConstraint(
                 fields=["election", "member"],
@@ -394,6 +402,8 @@ class LotteryDraw(models.Model):
     )
 
     class Meta:
+        verbose_name = "抽選"
+        verbose_name_plural = "抽選"
         constraints = [
             models.UniqueConstraint(
                 fields=[
