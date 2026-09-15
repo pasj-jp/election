@@ -9,19 +9,16 @@
 
     {% if original %}
 
-        {% if original.office == "representative" and original.phase == "final" %}
+        {% if original.status == "closed" %}
 
-            {% if original.status == "closed" %}
+            <li>
+                <a
+                    href="{% url 'admin:election_election_count_preview' original.pk %}"
+                >
+                    開票する
+                </a>
+            </li>
 
-                <li>
-                    <a
-                        href="{% url 'admin:election_election_count_preview' original.pk %}"
-                    >
-                        開票する
-                    </a>
-                </li>
-
-            {% endif %}
 
         {% endif %}
 

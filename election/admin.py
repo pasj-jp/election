@@ -16,8 +16,8 @@ from .models import (
 )
 
 from .services.counting import (
-    commit_representative_final_count,
-    preview_representative_final_count,
+    commit_election_count,
+    preview_election_count,
 )
 
 from .services.lottery import (
@@ -134,32 +134,8 @@ class ElectionAdmin(admin.ModelAdmin):
             pk=object_id,
         )
 
-        if not (
-            election.office
-            == Election.Office.REPRESENTATIVE
-            and election.phase
-            == Election.Phase.FINAL
-        ):
-            self.message_user(
-                request,
-                "現在GUI開票に対応しているのは"
-                "代議員本選挙のみです。",
-                level=messages.ERROR,
-            )
-
-            return redirect(
-                reverse(
-                    "admin:election_election_change",
-                    args=[election.pk],
-                )
-            )
-
         try:
-            preview = (
-                preview_representative_final_count(
-                    election
-                )
-            )
+            preview = preview_election_count(election)
 
         except ValidationError as exc:
             self.message_user(
@@ -185,11 +161,12 @@ class ElectionAdmin(admin.ModelAdmin):
             "opts": self.model._meta,
         }
 
-        return render(
-            request,
-            "admin/election/election/count_preview.html",
-            context,
+        template = (
+            "admin/election/election/count_preview.html"
+            if preview["kind"] == "representative_final"
+            else "admin/election/election/count_preview_simple.html"
         )
+        return render(request, template, context)
 
     def count_confirm_view(
         self,
@@ -210,11 +187,7 @@ class ElectionAdmin(admin.ModelAdmin):
             )
 
         try:
-            preview = (
-                commit_representative_final_count(
-                    election
-                )
-            )
+            preview = commit_election_count(election)
 
         except ValidationError as exc:
             self.message_user(
@@ -230,16 +203,24 @@ class ElectionAdmin(admin.ModelAdmin):
                 )
             )
 
-        lottery_count = sum(
-            1
-            for result in [
-                preview["general"],
-                preview["corporate"],
-            ]
-            if result["lottery_required"]
-        )
+        lottery_count = 0
+        if preview["kind"] == "representative_final":
+            lottery_count = sum(
+                1
+                for result in [
+                    preview["general"],
+                    preview["corporate"],
+                ]
+                if result["lottery_required"]
+            )
 
-        if lottery_count:
+        if preview["kind"] != "representative_final":
+            self.message_user(
+                request,
+                "開票を確定しました。",
+                level=messages.SUCCESS,
+            )
+        elif lottery_count:
             self.message_user(
                 request,
                 (

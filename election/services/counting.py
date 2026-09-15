@@ -14,6 +14,166 @@ from election.models import (
 
 GENERAL_SEATS = 25
 CORPORATE_SEATS = 5
+NOMINATION_THRESHOLDS = {
+    Election.Office.REPRESENTATIVE: 3,
+    Election.Office.PRESIDENT: 10,
+}
+
+
+def preview_preliminary_count(election):
+    if election.phase != Election.Phase.PRELIMINARY:
+        raise ValidationError("予備選挙ではありません。")
+    if election.status not in [
+        Election.Status.CLOSED,
+        Election.Status.COUNTED,
+    ]:
+        raise ValidationError("投票終了後に開票してください。")
+
+    try:
+        final = Election.objects.get(
+            cycle=election.cycle,
+            office=election.office,
+            phase=Election.Phase.FINAL,
+        )
+    except Election.DoesNotExist as exc:
+        raise ValidationError("対応する本選挙が存在しません。") from exc
+
+    if final.status != Election.Status.DRAFT:
+        raise ValidationError("本選挙が準備中ではありません。")
+    if Ballot.objects.filter(election=final).exists():
+        raise ValidationError("本選挙の投票データが既に存在します。")
+
+    threshold = NOMINATION_THRESHOLDS[election.office]
+    candidates = list(
+        Candidate.objects.filter(
+            election=election,
+            status=Candidate.Status.ELIGIBLE,
+        )
+        .select_related("member")
+        .annotate(
+            vote_count=Count(
+                "ballot_choices__ballot",
+                filter=Q(ballot_choices__ballot__election=election),
+                distinct=True,
+            )
+        )
+        .order_by("-vote_count", "member__member_no")
+    )
+    qualified = [c for c in candidates if c.vote_count >= threshold]
+    for candidate in candidates:
+        candidate.will_qualify = candidate.vote_count >= threshold
+    return {
+        "kind": "preliminary",
+        "election": election,
+        "final": final,
+        "ballot_count": Ballot.objects.filter(election=election).count(),
+        "threshold": threshold,
+        "candidates": candidates,
+        "qualified": qualified,
+        "can_confirm": True,
+    }
+
+
+@transaction.atomic
+def commit_preliminary_count(election):
+    election = Election.objects.select_for_update().get(pk=election.pk)
+    preview = preview_preliminary_count(election)
+    for candidate in preview["qualified"]:
+        Candidate.objects.get_or_create(
+            election=preview["final"],
+            member=candidate.member,
+            defaults={"status": Candidate.Status.QUALIFIED},
+        )
+    election.status = Election.Status.COUNTED
+    election.save(update_fields=["status"])
+    return preview
+
+
+def preview_president_final_count(election):
+    if not (
+        election.office == Election.Office.PRESIDENT
+        and election.phase == Election.Phase.FINAL
+    ):
+        raise ValidationError("会長本選挙ではありません。")
+    if election.status not in [
+        Election.Status.CLOSED,
+        Election.Status.COUNTED,
+    ]:
+        raise ValidationError("投票終了後に開票してください。")
+
+    candidates = list(
+        Candidate.objects.filter(
+            election=election,
+            status__in=[
+                Candidate.Status.QUALIFIED,
+                Candidate.Status.ACCEPTED,
+                Candidate.Status.ELECTED,
+                Candidate.Status.NOT_ELECTED,
+                Candidate.Status.LOTTERY,
+            ],
+        )
+        .select_related("member")
+        .annotate(
+            vote_count=Count(
+                "ballot_choices__ballot",
+                filter=Q(ballot_choices__ballot__election=election),
+                distinct=True,
+            )
+        )
+        .order_by("-vote_count", "member__member_no")
+    )
+    if not candidates:
+        raise ValidationError("会長候補者が存在しません。")
+    top_vote = candidates[0].vote_count
+    top_candidates = [c for c in candidates if c.vote_count == top_vote]
+    return {
+        "kind": "president_final",
+        "election": election,
+        "ballot_count": Ballot.objects.filter(election=election).count(),
+        "candidates": candidates,
+        "top_candidates": top_candidates,
+        "winner": top_candidates[0] if len(top_candidates) == 1 else None,
+        "can_confirm": len(top_candidates) == 1,
+    }
+
+
+@transaction.atomic
+def commit_president_final_count(election):
+    election = Election.objects.select_for_update().get(pk=election.pk)
+    preview = preview_president_final_count(election)
+    if not preview["can_confirm"]:
+        raise ValidationError("最多得票が同票のため確定できません。")
+    winner = preview["winner"]
+    for candidate in preview["candidates"]:
+        candidate.status = (
+            Candidate.Status.ELECTED
+            if candidate.pk == winner.pk
+            else Candidate.Status.NOT_ELECTED
+        )
+        candidate.save(update_fields=["status"])
+    election.status = Election.Status.COUNTED
+    election.save(update_fields=["status"])
+    return preview
+
+
+def preview_election_count(election):
+    if election.phase == Election.Phase.PRELIMINARY:
+        return preview_preliminary_count(election)
+    if election.office == Election.Office.PRESIDENT:
+        return preview_president_final_count(election)
+    preview = preview_representative_final_count(election)
+    preview["kind"] = "representative_final"
+    return preview
+
+
+def commit_election_count(election):
+    if election.phase == Election.Phase.PRELIMINARY:
+        return commit_preliminary_count(election)
+    if election.office == Election.Office.PRESIDENT:
+        return commit_president_final_count(election)
+    preview = commit_representative_final_count(election)
+    preview["kind"] = "representative_final"
+    return preview
 
 
 def get_representative_final_candidates(
