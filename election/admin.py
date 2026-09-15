@@ -26,6 +26,11 @@ from .services.lottery import (
 )
 
 
+admin.site.site_header = "加速器学会選挙システム"
+admin.site.site_title = "加速器学会選挙システム"
+admin.site.index_title = "選挙管理"
+
+
 @admin.register(ElectionCycle)
 class ElectionCycleAdmin(admin.ModelAdmin):
     list_display = (
