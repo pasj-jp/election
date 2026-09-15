@@ -630,9 +630,11 @@ class CandidateAdmin(admin.ModelAdmin):
 
     @admin.display(
         description="得票",
-        ordering="_vote_count",
     )
     def vote_count_display(self, obj):
+        if obj.election.status != Election.Status.COUNTED:
+            return "—"
+
         return obj._vote_count
 
 
@@ -719,6 +721,7 @@ class LotteryCandidateInline(admin.TabularInline):
         obj=None,
     ):
         return False
+
 
 
 @admin.register(LotteryDraw)
@@ -897,4 +900,3 @@ class LotteryDrawAdmin(admin.ModelAdmin):
         obj=None,
     ):
         return False
-
