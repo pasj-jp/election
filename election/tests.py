@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.test import SimpleTestCase
 from django.urls import reverse
 
-from .admin import CandidateAdmin
+from .admin import CandidateAdmin, order_admin_models
 from .models import Candidate, Election
 
 
@@ -67,4 +67,34 @@ class CandidateAdminTest(SimpleTestCase):
         self.assertEqual(
             self.model_admin.vote_count_display(candidate),
             3,
+        )
+
+
+class AdminModelOrderTest(SimpleTestCase):
+
+    def test_workflow_models_are_displayed_first(self):
+        app_list = order_admin_models([
+            {
+                "app_label": "election",
+                "models": [
+                    {"object_name": "Election"},
+                    {"object_name": "Candidate"},
+                    {"object_name": "MemberSnapshot"},
+                    {"object_name": "VoterParticipation"},
+                ],
+            },
+        ])
+
+        model_names = [
+            model["object_name"]
+            for model in app_list[0]["models"]
+        ]
+
+        self.assertEqual(
+            model_names[:3],
+            [
+                "MemberSnapshot",
+                "VoterParticipation",
+                "Candidate",
+            ],
         )

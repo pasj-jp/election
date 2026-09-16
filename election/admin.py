@@ -31,6 +31,37 @@ admin.site.site_title = "加速器学会選挙システム"
 admin.site.index_title = "選挙管理"
 
 
+_default_get_app_list = admin.site.get_app_list
+
+
+def order_admin_models(app_list):
+    model_order = {
+        "MemberSnapshot": 0,
+        "VoterParticipation": 1,
+        "Candidate": 2,
+    }
+
+    for app in app_list:
+        if app["app_label"] == "election":
+            app["models"].sort(
+                key=lambda model: model_order.get(
+                    model["object_name"],
+                    len(model_order),
+                )
+            )
+
+    return app_list
+
+
+def get_ordered_app_list(request, app_label=None):
+    return order_admin_models(
+        _default_get_app_list(request, app_label)
+    )
+
+
+admin.site.get_app_list = get_ordered_app_list
+
+
 @admin.register(ElectionCycle)
 class ElectionCycleAdmin(admin.ModelAdmin):
     list_display = (

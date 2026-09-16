@@ -265,6 +265,8 @@ class VoterParticipation(models.Model):
     )
 
     class Meta:
+        verbose_name = "投票資格者"
+        verbose_name_plural = "投票資格者"
         constraints = [
             models.UniqueConstraint(
                 fields=["election", "member"],
