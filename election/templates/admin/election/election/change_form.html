@@ -9,19 +9,28 @@
 
     {% if original %}
 
-        {% if original.office == "representative" and original.phase == "final" %}
+        {% if original.is_voting_open %}
 
-            {% if original.status == "closed" %}
+            <li>
+                <a
+                    href="{% url 'admin:election_election_email_preview' original.pk %}"
+                >
+                    メール送信
+                </a>
+            </li>
 
-                <li>
-                    <a
-                        href="{% url 'admin:election_election_count_preview' original.pk %}"
-                    >
-                        開票する
-                    </a>
-                </li>
+        {% endif %}
 
-            {% endif %}
+        {% if original.status == "closed" %}
+
+            <li>
+                <a
+                    href="{% url 'admin:election_election_count_preview' original.pk %}"
+                >
+                    開票する
+                </a>
+            </li>
+
 
         {% endif %}
 

@@ -1,136 +1,81 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>{{ election }}</title>
-</head>
+{% extends "election/voting_base.html" %}
 
-<body>
+{% block title %}{{ election.cycle.name }}{% endblock %}
 
-<h1>{{ election }}</h1>
+{% block content %}
+<main class="page">
+    <header class="page-header">
+        <p class="eyebrow">ONLINE VOTING</p>
+        <h1>{{ election.cycle.name }}</h1>
+        <p class="election-type">
+            <span>{{ election.get_office_display }}</span>
+            <span class="election-phase">{{ election.get_phase_display }}</span>
+        </p>
+    </header>
 
-{% if election.office == "representative" %}
+    {% if election.office == "representative" %}
+        <p class="instruction">本選挙に推薦する会員を最大10名まで選択してください。</p>
+    {% else %}
+        <p class="instruction">投票する候補者を1名選択してください。</p>
+    {% endif %}
 
-<p>
-    本選挙に推薦する会員を
-    最大10名まで選択してください。
-</p>
-
-<p>
-    選択人数:
-    <strong id="selected-count">0</strong>
-    / 10
-</p>
-
-{% endif %}
-
-
-<form
-    method="post"
-    action="{% url 'election:ballot_confirm' %}"
->
-
-    {% csrf_token %}
-
-    {% for candidate in candidates %}
-
-        <div>
-
-            <label>
-
-                <input
-                    type="checkbox"
-                    name="candidate"
-                    value="{{ candidate.pk }}"
-                    class="candidate-checkbox"
-                >
-
-                {{ candidate.member.last_name }}
-                {{ candidate.member.first_name }}
-
-                {% if candidate.member.representative_category == "corporate" %}
-                    【企業枠】
-                {% else %}
-                    【一般枠】
-                {% endif %}
-
-                {% if candidate.member.affiliation %}
-                    -
-                    {{ candidate.member.affiliation }}
-                {% endif %}
-
-            </label>
-
+    <form method="post" action="{% url 'election:ballot_confirm' %}">
+        {% csrf_token %}
+        <div class="action-bar">
+            <div class="selection-count">
+                選択人数: <strong id="selected-count">0</strong>
+                {% if election.office == "representative" %}/ 10{% endif %}
+            </div>
+            <button type="submit" class="primary-button">投票内容を確認</button>
         </div>
 
-    {% empty %}
+        <div class="candidate-list">
+            {% for candidate in candidates %}
+                <label class="candidate">
+                    <input
+                        type="{% if election.office == 'representative' %}checkbox{% else %}radio{% endif %}"
+                        name="candidate"
+                        value="{{ candidate.pk }}"
+                        class="candidate-checkbox"
+                        {% if candidate.pk in selected_candidate_ids %}checked{% endif %}
+                    >
+                    <span>
+                        <span class="candidate-name">{{ candidate.member.last_name }} {{ candidate.member.first_name }}</span>
+                        {% if candidate.member.affiliation %}
+                            <span class="affiliation">{{ candidate.member.affiliation }}</span>
+                        {% endif %}
+                    </span>
+                </label>
+            {% empty %}
+                <p class="empty">候補者が登録されていません。</p>
+            {% endfor %}
+        </div>
+    </form>
+</main>
+{% endblock %}
 
-        <p>
-            候補者が登録されていません。
-        </p>
-
-    {% endfor %}
-
-    <p>
-        <button type="submit">
-            投票内容を確認
-        </button>
-    </p>
-
-</form>
-
-
+{% block scripts %}
 <script>
 document.addEventListener("DOMContentLoaded", function () {
+    const choices = document.querySelectorAll(".candidate-checkbox");
+    const counter = document.getElementById("selected-count");
+    const isRepresentative = "{{ election.office|escapejs }}" === "representative";
 
-    const checkboxes =
-        document.querySelectorAll(
-            ".candidate-checkbox"
-        );
-
-    const counter =
-        document.getElementById(
-            "selected-count"
-        );
-
-    function updateCount() {
-
-        const checked =
-            document.querySelectorAll(
-                ".candidate-checkbox:checked"
-            );
-
-        counter.textContent =
-            checked.length;
-
-        checkboxes.forEach(function (checkbox) {
-
-            if (
-                checked.length >= 10
-                && !checkbox.checked
-            ) {
-                checkbox.disabled = true;
-            } else {
-                checkbox.disabled = false;
+    function updateSelection() {
+        const checked = document.querySelectorAll(".candidate-checkbox:checked");
+        counter.textContent = checked.length;
+        choices.forEach(function (choice) {
+            choice.closest(".candidate").classList.toggle("selected", choice.checked);
+            if (isRepresentative) {
+                choice.disabled = checked.length >= 10 && !choice.checked;
             }
-
         });
     }
 
-    checkboxes.forEach(
-        function (checkbox) {
-
-            checkbox.addEventListener(
-                "change",
-                updateCount
-            );
-
-        }
-    );
-
-    updateCount();
+    choices.forEach(function (choice) {
+        choice.addEventListener("change", updateSelection);
+    });
+    updateSelection();
 });
 </script>
-
-</body>
-</html>
+{% endblock %}

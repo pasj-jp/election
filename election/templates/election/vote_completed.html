@@ -1,30 +1,26 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>投票完了</title>
-</head>
+{% extends "election/voting_base.html" %}
 
-<body>
+{% block title %}{{ election.cycle.name }} - 投票完了{% endblock %}
+{% block body_class %}centered-page{% endblock %}
 
-<h1>投票を受け付けました</h1>
-
-<p>
-    {{ election }}
-</p>
-
-<p>
-    投票は正常に受け付けられました。
-</p>
-
-<p>
-    受付日時:
-    {{ submitted_at|date:"Y年m月d日 H:i:s" }}
-</p>
-
-<p>
-    この投票URLから再度投票することはできません。
-</p>
-
-</body>
-</html>
+{% block content %}
+<main class="status-card">
+    <div class="status-main">
+        <div class="status-icon status-icon--success" aria-hidden="true">✓</div>
+        <p class="eyebrow">VOTE COMPLETED</p>
+        <h1>投票を受け付けました</h1>
+        <p class="election-name">{{ election.cycle.name }}</p>
+        <p class="status-election-type">{{ election.get_office_display }}・{{ election.get_phase_display }}</p>
+        <div class="receipt">
+            <span class="receipt-label">受付日時</span>
+            <time class="receipt-time" datetime="{{ submitted_at|date:'c' }}">
+                {{ submitted_at|date:"Y年m月d日 H:i:s" }}
+            </time>
+        </div>
+    </div>
+    <div class="status-note">
+        <p>投票は正常に受け付けられました。</p>
+        <p>この投票URLから再度投票することはできません。この画面を閉じてください。</p>
+    </div>
+</main>
+{% endblock %}

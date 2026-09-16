@@ -1,71 +1,49 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>投票内容確認</title>
-</head>
+{% extends "election/voting_base.html" %}
 
-<body>
+{% block title %}{{ election.cycle.name }} - 投票内容確認{% endblock %}
 
-<h1>投票内容の確認</h1>
+{% block content %}
+<main class="page page--narrow">
+    <header class="page-header">
+        <p class="eyebrow">VOTE CONFIRMATION</p>
+        <h1>{{ election.cycle.name }}</h1>
+        <p class="election-type">
+            <span>{{ election.get_office_display }}</span>
+            <span class="election-phase">{{ election.get_phase_display }}</span>
+        </p>
+    </header>
 
-<p>
-    {{ election }}
-</p>
+    <section class="confirm-panel">
+        <div class="panel-header">
+            <h2>投票内容の確認</h2>
+            <p>以下の候補者を選択しています。内容をご確認ください。</p>
+        </div>
+        <ol class="candidate-list">
+            {% for candidate in candidates %}
+                <li class="candidate">
+                    <span class="candidate-number">{{ forloop.counter }}</span>
+                    <span>
+                        <span class="candidate-name">{{ candidate.member.last_name }} {{ candidate.member.first_name }}</span>
+                        {% if candidate.member.affiliation %}
+                            <span class="affiliation">{{ candidate.member.affiliation }}</span>
+                        {% endif %}
+                    </span>
+                </li>
+            {% endfor %}
+        </ol>
+        <div class="summary">
+            <p>選択人数</p>
+            <p><strong>{{ candidates|length }}</strong> 名</p>
+        </div>
+    </section>
 
-<p>
-    以下の候補者を選択しています。
-</p>
-
-<ul>
-
-{% for candidate in candidates %}
-
-    <li>
-        {{ candidate.member.last_name }}
-        {{ candidate.member.first_name }}
-
-        {% if candidate.member.representative_category == "corporate" %}
-            【企業枠】
-        {% else %}
-            【一般枠】
-        {% endif %}
-
-        {% if candidate.member.affiliation %}
-            -
-            {{ candidate.member.affiliation }}
-        {% endif %}
-    </li>
-
-{% endfor %}
-
-</ul>
-
-<p>
-    選択人数:
-    {{ candidates|length }} 名
-</p>
-
-
-<form
-    method="post"
-    action="{% url 'election:ballot_submit' %}"
->
-
-    {% csrf_token %}
-
-    <button type="submit">
-        この内容で投票する
-    </button>
-
-</form>
-
-
-<p>
-    <a href="{% url 'election:ballot' %}">
-        選択画面へ戻る
-    </a>
-</p>
-
-</body>
-</html>
+    <div class="actions">
+        <a href="{% url 'election:ballot' %}" class="secondary-button">選択画面へ戻る</a>
+        <form method="post" action="{% url 'election:ballot_submit' %}">
+            {% csrf_token %}
+            <button type="submit" class="primary-button">この内容で投票する</button>
+        </form>
+    </div>
+    <p class="notice">「この内容で投票する」を押すと投票が確定します。</p>
+</main>
+{% endblock %}

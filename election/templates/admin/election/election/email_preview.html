@@ -1,0 +1,39 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+
+<h1>{{ election }} - 投票メール送信</h1>
+
+<div class="module">
+    <h2>送信対象の確認</h2>
+    <div style="padding:16px;">
+        <p><strong>未送信の対象者:</strong> {{ target_count }}名</p>
+        <p><strong>送信済み:</strong> {{ sent_count }}名</p>
+
+        {% if existing_token_count %}
+            <p class="errornote">
+                未送信者のうち{{ existing_token_count }}名には既存のトークンがあります。
+                安全のためGUIからは送信できません。
+            </p>
+        {% endif %}
+
+        <p>
+            送信すると、有権者ごとに固有の投票URLが生成され、
+            登録されているメールアドレスへ送信されます。
+        </p>
+    </div>
+</div>
+
+<div class="submit-row">
+    {% if target_count and not existing_token_count %}
+        <form method="post" action="{% url 'admin:election_election_email_send' election.pk %}">
+            {% csrf_token %}
+            <input type="submit" value="{{ target_count }}名にメールを送信" class="default">
+        </form>
+    {% endif %}
+    <a href="{% url 'admin:election_election_change' election.pk %}" class="button">
+        キャンセル
+    </a>
+</div>
+
+{% endblock %}

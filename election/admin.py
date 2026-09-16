@@ -1,5 +1,10 @@
+from io import StringIO
+
 from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
 from django.core.exceptions import ValidationError
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
@@ -16,14 +21,50 @@ from .models import (
 )
 
 from .services.counting import (
-    commit_representative_final_count,
-    preview_representative_final_count,
+    commit_election_count,
+    preview_election_count,
 )
 
 from .services.lottery import (
     execute_lottery,
     preview_lottery,
 )
+
+
+admin.site.site_header = "加速器学会選挙システム"
+admin.site.site_title = "加速器学会選挙システム"
+admin.site.index_title = "選挙管理"
+
+
+_default_get_app_list = admin.site.get_app_list
+
+
+def order_admin_models(app_list):
+    model_order = {
+        "MemberSnapshot": 0,
+        "VoterParticipation": 1,
+        "Candidate": 2,
+    }
+
+    for app in app_list:
+        if app["app_label"] == "election":
+            app["models"].sort(
+                key=lambda model: model_order.get(
+                    model["object_name"],
+                    len(model_order),
+                )
+            )
+
+    return app_list
+
+
+def get_ordered_app_list(request, app_label=None):
+    return order_admin_models(
+        _default_get_app_list(request, app_label)
+    )
+
+
+admin.site.get_app_list = get_ordered_app_list
 
 
 @admin.register(ElectionCycle)
@@ -120,9 +161,142 @@ class ElectionAdmin(admin.ModelAdmin):
                 ),
                 name="election_election_count_confirm",
             ),
+            path(
+                "<path:object_id>/email-preview/",
+                self.admin_site.admin_view(
+                    self.email_preview_view
+                ),
+                name="election_election_email_preview",
+            ),
+            path(
+                "<path:object_id>/email-send/",
+                self.admin_site.admin_view(
+                    self.email_send_view
+                ),
+                name="election_election_email_send",
+            ),
         ]
 
         return custom_urls + urls
+
+    def get_email_election(self, request, object_id):
+        election = get_object_or_404(
+            Election.objects.select_related("cycle"),
+            pk=object_id,
+        )
+        if not self.has_change_permission(request, election):
+            raise PermissionDenied
+        return election
+
+    def email_preview_view(self, request, object_id):
+        election = self.get_email_election(request, object_id)
+        if not election.is_voting_open:
+            self.message_user(
+                request,
+                "投票期間中かつ「投票受付中」の選挙に限り、"
+                "メールを送信できます。",
+                level=messages.ERROR,
+            )
+            return redirect(
+                reverse(
+                    "admin:election_election_change",
+                    args=[election.pk],
+                )
+            )
+        voters = election.voter_participations.filter(
+            voted_at__isnull=True,
+            email_sent_at__isnull=True,
+        )
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "投票メール送信",
+            "election": election,
+            "target_count": voters.count(),
+            "existing_token_count": voters.filter(
+                token_hash__isnull=False,
+            ).count(),
+            "sent_count": election.voter_participations.filter(
+                email_sent_at__isnull=False,
+            ).count(),
+            "opts": self.model._meta,
+        }
+        return render(
+            request,
+            "admin/election/election/email_preview.html",
+            context,
+        )
+
+    def email_send_view(self, request, object_id):
+        election = self.get_email_election(request, object_id)
+        change_url = reverse(
+            "admin:election_election_change",
+            args=[election.pk],
+        )
+        if request.method != "POST":
+            return redirect(
+                reverse(
+                    "admin:election_election_email_preview",
+                    args=[election.pk],
+                )
+            )
+
+        if not election.is_voting_open:
+            self.message_user(
+                request,
+                "投票期間中かつ「投票受付中」の選挙に限り、"
+                "メールを送信できます。",
+                level=messages.ERROR,
+            )
+            return redirect(change_url)
+
+        token_marker = "EMAIL_TOKEN_MARKER"
+        voting_url = request.build_absolute_uri(
+            reverse("election:vote_entry", args=[token_marker])
+        )
+        base_url = voting_url.replace(token_marker + "/", "")
+        before = election.voter_participations.filter(
+            email_sent_at__isnull=False,
+        ).count()
+        target_count = election.voter_participations.filter(
+            voted_at__isnull=True,
+            email_sent_at__isnull=True,
+        ).count()
+
+        try:
+            call_command(
+                "send_voting_emails",
+                cycle=election.cycle.year,
+                office=election.office,
+                phase=election.phase,
+                base_url=base_url,
+                stdout=StringIO(),
+                stderr=StringIO(),
+            )
+        except CommandError as exc:
+            self.message_user(
+                request,
+                str(exc),
+                level=messages.ERROR,
+            )
+            return redirect(change_url)
+
+        after = election.voter_participations.filter(
+            email_sent_at__isnull=False,
+        ).count()
+        sent_count = after - before
+        failed_count = target_count - sent_count
+        level = (
+            messages.SUCCESS
+            if failed_count == 0
+            else messages.WARNING
+        )
+        self.message_user(
+            request,
+            f"投票メールを{sent_count}件送信しました。"
+            f" 未送信は{failed_count}件です。",
+            level=level,
+        )
+        return redirect(change_url)
 
     def count_preview_view(
         self,
@@ -134,32 +308,8 @@ class ElectionAdmin(admin.ModelAdmin):
             pk=object_id,
         )
 
-        if not (
-            election.office
-            == Election.Office.REPRESENTATIVE
-            and election.phase
-            == Election.Phase.FINAL
-        ):
-            self.message_user(
-                request,
-                "現在GUI開票に対応しているのは"
-                "代議員本選挙のみです。",
-                level=messages.ERROR,
-            )
-
-            return redirect(
-                reverse(
-                    "admin:election_election_change",
-                    args=[election.pk],
-                )
-            )
-
         try:
-            preview = (
-                preview_representative_final_count(
-                    election
-                )
-            )
+            preview = preview_election_count(election)
 
         except ValidationError as exc:
             self.message_user(
@@ -185,11 +335,12 @@ class ElectionAdmin(admin.ModelAdmin):
             "opts": self.model._meta,
         }
 
-        return render(
-            request,
-            "admin/election/election/count_preview.html",
-            context,
+        template = (
+            "admin/election/election/count_preview.html"
+            if preview["kind"] == "representative_final"
+            else "admin/election/election/count_preview_simple.html"
         )
+        return render(request, template, context)
 
     def count_confirm_view(
         self,
@@ -210,11 +361,7 @@ class ElectionAdmin(admin.ModelAdmin):
             )
 
         try:
-            preview = (
-                commit_representative_final_count(
-                    election
-                )
-            )
+            preview = commit_election_count(election)
 
         except ValidationError as exc:
             self.message_user(
@@ -230,16 +377,24 @@ class ElectionAdmin(admin.ModelAdmin):
                 )
             )
 
-        lottery_count = sum(
-            1
-            for result in [
-                preview["general"],
-                preview["corporate"],
-            ]
-            if result["lottery_required"]
-        )
+        lottery_count = 0
+        if preview["kind"] == "representative_final":
+            lottery_count = sum(
+                1
+                for result in [
+                    preview["general"],
+                    preview["corporate"],
+                ]
+                if result["lottery_required"]
+            )
 
-        if lottery_count:
+        if preview["kind"] != "representative_final":
+            self.message_user(
+                request,
+                "開票を確定しました。",
+                level=messages.SUCCESS,
+            )
+        elif lottery_count:
             self.message_user(
                 request,
                 (

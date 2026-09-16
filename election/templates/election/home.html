@@ -1,0 +1,16 @@
+{% extends "election/voting_base.html" %}
+
+{% block title %}加速器学会選挙システム{% endblock %}
+{% block body_class %}centered-page{% endblock %}
+
+{% block content %}
+<main class="home-card">
+    <h1>加速器学会選挙システム</h1>
+    <p>日本加速器学会の会長選挙・代議員選挙を行うためのシステムです。</p>
+    <div class="home-notice">
+        <p>投票される方は、選挙案内メールに記載された専用URLから投票ページへアクセスしてください。</p>
+        <p>専用URLは他の方と共有しないでください。</p>
+    </div>
+    <a class="primary-button" href="{% url 'admin:index' %}">選挙管理者ログイン</a>
+</main>
+{% endblock %}

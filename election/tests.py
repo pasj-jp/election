@@ -1,8 +1,28 @@
+from datetime import timedelta
+
 from django.contrib import admin
 from django.test import SimpleTestCase
+from django.urls import reverse
+from django.utils import timezone
 
-from .admin import CandidateAdmin
+from .admin import CandidateAdmin, order_admin_models
 from .models import Candidate, Election
+
+
+class HomeViewTest(SimpleTestCase):
+
+    def test_home_page_is_displayed(self):
+        response = self.client.get(reverse("election:home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "加速器学会選挙システム",
+        )
+        self.assertContains(
+            response,
+            reverse("admin:index"),
+        )
 
 
 class CandidateAdminTest(SimpleTestCase):
@@ -51,3 +71,70 @@ class CandidateAdminTest(SimpleTestCase):
             self.model_admin.vote_count_display(candidate),
             3,
         )
+
+
+class AdminModelOrderTest(SimpleTestCase):
+
+    def test_workflow_models_are_displayed_first(self):
+        app_list = order_admin_models([
+            {
+                "app_label": "election",
+                "models": [
+                    {"object_name": "Election"},
+                    {"object_name": "Candidate"},
+                    {"object_name": "MemberSnapshot"},
+                    {"object_name": "VoterParticipation"},
+                ],
+            },
+        ])
+
+        model_names = [
+            model["object_name"]
+            for model in app_list[0]["models"]
+        ]
+
+        self.assertEqual(
+            model_names[:3],
+            [
+                "MemberSnapshot",
+                "VoterParticipation",
+                "Candidate",
+            ],
+        )
+
+
+class ElectionVotingPeriodTest(SimpleTestCase):
+
+    def test_open_election_during_period_is_available(self):
+        now = timezone.now()
+        election = Election(
+            status=Election.Status.OPEN,
+            start_at=now - timedelta(minutes=1),
+            end_at=now + timedelta(minutes=1),
+        )
+
+        self.assertTrue(election.is_voting_open)
+
+    def test_draft_or_outside_period_is_not_available(self):
+        now = timezone.now()
+        elections = [
+            Election(
+                status=Election.Status.DRAFT,
+                start_at=now - timedelta(minutes=1),
+                end_at=now + timedelta(minutes=1),
+            ),
+            Election(
+                status=Election.Status.OPEN,
+                start_at=now + timedelta(minutes=1),
+                end_at=now + timedelta(minutes=2),
+            ),
+            Election(
+                status=Election.Status.OPEN,
+                start_at=now - timedelta(minutes=2),
+                end_at=now - timedelta(minutes=1),
+            ),
+        ]
+
+        for election in elections:
+            with self.subTest(election=election):
+                self.assertFalse(election.is_voting_open)

@@ -1,0 +1,73 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+
+<h1>{{ election }} - 開票プレビュー</h1>
+
+<div class="module">
+    <h2>集計結果</h2>
+    <div style="padding:16px;">
+        <p><strong>Ballot数:</strong> {{ preview.ballot_count }}</p>
+
+        {% if preview.kind == "preliminary" %}
+            <p><strong>本選挙進出基準:</strong> {{ preview.threshold }}票以上</p>
+            <p><strong>本選挙進出予定:</strong> {{ preview.qualified|length }}名</p>
+        {% elif preview.winner %}
+            <p><strong>当選予定:</strong>
+                {{ preview.winner.member.last_name }}
+                {{ preview.winner.member.first_name }}
+                （{{ preview.winner.vote_count }}票）
+            </p>
+        {% else %}
+            <p style="color:#ba2121;"><strong>
+                最多得票が同票のため、この画面では結果を確定できません。
+            </strong></p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="module">
+    <h2>候補者別得票</h2>
+    <table>
+        <thead><tr>
+            <th>会員番号</th><th>氏名</th><th>所属</th><th>得票</th><th>結果</th>
+        </tr></thead>
+        <tbody>
+        {% for candidate in preview.candidates %}
+            <tr>
+                <td>{{ candidate.member.member_no }}</td>
+                <td>{{ candidate.member.last_name }} {{ candidate.member.first_name }}</td>
+                <td>{{ candidate.member.affiliation }}</td>
+                <td>{{ candidate.vote_count }}</td>
+                <td>
+                    {% if preview.kind == "preliminary" %}
+                        {% if candidate.will_qualify %}本選挙進出{% else %}基準未達{% endif %}
+                    {% else %}
+                        {% if preview.winner %}
+                            {% if candidate == preview.winner %}当選{% else %}落選{% endif %}
+                        {% elif candidate in preview.top_candidates %}
+                            最多得票同票
+                        {% else %}
+                            落選
+                        {% endif %}
+                    {% endif %}
+                </td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="5">候補者がいません。</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="submit-row">
+    {% if preview.can_confirm %}
+        <form method="post" action="{% url 'admin:election_election_count_confirm' election.pk %}">
+            {% csrf_token %}
+            <input type="submit" value="この内容で開票を確定" class="default">
+        </form>
+    {% endif %}
+    <a href="{% url 'admin:election_election_change' election.pk %}" class="button">キャンセル</a>
+</div>
+
+{% endblock %}
