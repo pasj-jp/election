@@ -9,6 +9,18 @@
 
     {% if original %}
 
+        {% if original.is_voting_open %}
+
+            <li>
+                <a
+                    href="{% url 'admin:election_election_email_preview' original.pk %}"
+                >
+                    メール送信
+                </a>
+            </li>
+
+        {% endif %}
+
         {% if original.status == "closed" %}
 
             <li>

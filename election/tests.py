@@ -1,6 +1,9 @@
+from datetime import timedelta
+
 from django.contrib import admin
 from django.test import SimpleTestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from .admin import CandidateAdmin, order_admin_models
 from .models import Candidate, Election
@@ -98,3 +101,40 @@ class AdminModelOrderTest(SimpleTestCase):
                 "Candidate",
             ],
         )
+
+
+class ElectionVotingPeriodTest(SimpleTestCase):
+
+    def test_open_election_during_period_is_available(self):
+        now = timezone.now()
+        election = Election(
+            status=Election.Status.OPEN,
+            start_at=now - timedelta(minutes=1),
+            end_at=now + timedelta(minutes=1),
+        )
+
+        self.assertTrue(election.is_voting_open)
+
+    def test_draft_or_outside_period_is_not_available(self):
+        now = timezone.now()
+        elections = [
+            Election(
+                status=Election.Status.DRAFT,
+                start_at=now - timedelta(minutes=1),
+                end_at=now + timedelta(minutes=1),
+            ),
+            Election(
+                status=Election.Status.OPEN,
+                start_at=now + timedelta(minutes=1),
+                end_at=now + timedelta(minutes=2),
+            ),
+            Election(
+                status=Election.Status.OPEN,
+                start_at=now - timedelta(minutes=2),
+                end_at=now - timedelta(minutes=1),
+            ),
+        ]
+
+        for election in elections:
+            with self.subTest(election=election):
+                self.assertFalse(election.is_voting_open)

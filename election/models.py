@@ -1,6 +1,7 @@
 import uuid
 
 from django.db import models
+from django.utils import timezone
 
 class ElectionCycle(models.Model):
     """
@@ -86,6 +87,15 @@ class Election(models.Model):
             f"{self.get_phase_display()}"
         )
 
+    @property
+    def is_voting_open(self):
+        now = timezone.now()
+        return (
+            self.status == self.Status.OPEN
+            and self.start_at <= now
+            and now < self.end_at
+        )
+
 
 class MemberSnapshot(models.Model):
     """
@@ -107,17 +117,22 @@ class MemberSnapshot(models.Model):
 
     member_no = models.CharField(
         max_length=32,
+        verbose_name="会員番号",
     )
 
     last_name = models.CharField(
         max_length=100,
+        verbose_name="氏",
     )
 
     first_name = models.CharField(
         max_length=100,
+        verbose_name="名",
     )
 
-    email = models.EmailField()
+    email = models.EmailField(
+        verbose_name="メールアドレス",
+    )
 
     affiliation = models.CharField(
         max_length=255,
@@ -126,20 +141,24 @@ class MemberSnapshot(models.Model):
 
     employee_type = models.CharField(
         max_length=100,
+        verbose_name="会員種別",
     )
 
     business_category = models.CharField(
         max_length=100,
         blank=True,
+        verbose_name="所属カテゴリー",
     )
 
     representative_category = models.CharField(
         max_length=20,
         choices=RepresentativeCategory.choices,
+        verbose_name="所属枠",
     )
 
     is_eligible_voter = models.BooleanField(
         default=False,
+        verbose_name="有権者資格",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)

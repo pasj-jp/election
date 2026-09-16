@@ -1,5 +1,10 @@
+from io import StringIO
+
 from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
 from django.core.exceptions import ValidationError
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
@@ -156,9 +161,142 @@ class ElectionAdmin(admin.ModelAdmin):
                 ),
                 name="election_election_count_confirm",
             ),
+            path(
+                "<path:object_id>/email-preview/",
+                self.admin_site.admin_view(
+                    self.email_preview_view
+                ),
+                name="election_election_email_preview",
+            ),
+            path(
+                "<path:object_id>/email-send/",
+                self.admin_site.admin_view(
+                    self.email_send_view
+                ),
+                name="election_election_email_send",
+            ),
         ]
 
         return custom_urls + urls
+
+    def get_email_election(self, request, object_id):
+        election = get_object_or_404(
+            Election.objects.select_related("cycle"),
+            pk=object_id,
+        )
+        if not self.has_change_permission(request, election):
+            raise PermissionDenied
+        return election
+
+    def email_preview_view(self, request, object_id):
+        election = self.get_email_election(request, object_id)
+        if not election.is_voting_open:
+            self.message_user(
+                request,
+                "投票期間中かつ「投票受付中」の選挙に限り、"
+                "メールを送信できます。",
+                level=messages.ERROR,
+            )
+            return redirect(
+                reverse(
+                    "admin:election_election_change",
+                    args=[election.pk],
+                )
+            )
+        voters = election.voter_participations.filter(
+            voted_at__isnull=True,
+            email_sent_at__isnull=True,
+        )
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "投票メール送信",
+            "election": election,
+            "target_count": voters.count(),
+            "existing_token_count": voters.filter(
+                token_hash__isnull=False,
+            ).count(),
+            "sent_count": election.voter_participations.filter(
+                email_sent_at__isnull=False,
+            ).count(),
+            "opts": self.model._meta,
+        }
+        return render(
+            request,
+            "admin/election/election/email_preview.html",
+            context,
+        )
+
+    def email_send_view(self, request, object_id):
+        election = self.get_email_election(request, object_id)
+        change_url = reverse(
+            "admin:election_election_change",
+            args=[election.pk],
+        )
+        if request.method != "POST":
+            return redirect(
+                reverse(
+                    "admin:election_election_email_preview",
+                    args=[election.pk],
+                )
+            )
+
+        if not election.is_voting_open:
+            self.message_user(
+                request,
+                "投票期間中かつ「投票受付中」の選挙に限り、"
+                "メールを送信できます。",
+                level=messages.ERROR,
+            )
+            return redirect(change_url)
+
+        token_marker = "EMAIL_TOKEN_MARKER"
+        voting_url = request.build_absolute_uri(
+            reverse("election:vote_entry", args=[token_marker])
+        )
+        base_url = voting_url.replace(token_marker + "/", "")
+        before = election.voter_participations.filter(
+            email_sent_at__isnull=False,
+        ).count()
+        target_count = election.voter_participations.filter(
+            voted_at__isnull=True,
+            email_sent_at__isnull=True,
+        ).count()
+
+        try:
+            call_command(
+                "send_voting_emails",
+                cycle=election.cycle.year,
+                office=election.office,
+                phase=election.phase,
+                base_url=base_url,
+                stdout=StringIO(),
+                stderr=StringIO(),
+            )
+        except CommandError as exc:
+            self.message_user(
+                request,
+                str(exc),
+                level=messages.ERROR,
+            )
+            return redirect(change_url)
+
+        after = election.voter_participations.filter(
+            email_sent_at__isnull=False,
+        ).count()
+        sent_count = after - before
+        failed_count = target_count - sent_count
+        level = (
+            messages.SUCCESS
+            if failed_count == 0
+            else messages.WARNING
+        )
+        self.message_user(
+            request,
+            f"投票メールを{sent_count}件送信しました。"
+            f" 未送信は{failed_count}件です。",
+            level=level,
+        )
+        return redirect(change_url)
 
     def count_preview_view(
         self,

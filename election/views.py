@@ -30,13 +30,7 @@ def hash_token(token):
 
 
 def election_is_open(election):
-    now = timezone.now()
-
-    return (
-        election.status == Election.Status.OPEN
-        and election.start_at <= now
-        and now < election.end_at
-    )
+    return election.is_voting_open
 
 
 def get_valid_candidate_statuses(election):
