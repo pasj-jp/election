@@ -2,135 +2,151 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>{{ election }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ election.cycle.name }}</title>
+    <style>
+        :root {
+            color-scheme: light;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", sans-serif;
+            color: #243441;
+            background: #eef4f7;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; min-height: 100vh; }
+        .page { width: min(860px, 100%); margin: 0 auto; padding: 40px 20px 64px; }
+        .page-header { margin-bottom: 28px; }
+        .eyebrow { margin: 0 0 8px; color: #24718f; font-size: .82rem; font-weight: 700; letter-spacing: .12em; }
+        h1 { margin: 0; color: #153f55; font-size: clamp(1.65rem, 5vw, 2.5rem); line-height: 1.35; }
+        .election-type { margin: 10px 0 0; color: #607482; }
+        .instruction { margin: 0 0 20px; line-height: 1.8; }
+        .action-bar {
+            position: sticky;
+            z-index: 10;
+            top: 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            margin: 0 -8px 22px;
+            padding: 14px 16px;
+            background: rgba(255, 255, 255, .96);
+            border: 1px solid #d7e3e9;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(26, 67, 87, .12);
+            backdrop-filter: blur(10px);
+        }
+        .selection-count { color: #526975; }
+        .selection-count strong { color: #126b8c; font-size: 1.25rem; }
+        .submit-button {
+            padding: 12px 22px;
+            color: #fff;
+            background: #167596;
+            border: 0;
+            border-radius: 8px;
+            box-shadow: 0 5px 12px rgba(22, 117, 150, .22);
+            cursor: pointer;
+            font: inherit;
+            font-weight: 700;
+        }
+        .submit-button:hover { background: #105d78; }
+        .candidate-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+        .candidate {
+            display: flex;
+            align-items: flex-start;
+            gap: 13px;
+            min-height: 86px;
+            padding: 17px 18px;
+            background: #fff;
+            border: 1px solid #d7e3e9;
+            border-radius: 10px;
+            box-shadow: 0 3px 10px rgba(28, 66, 84, .05);
+            cursor: pointer;
+            transition: border-color .15s, box-shadow .15s, transform .15s;
+        }
+        .candidate:hover { border-color: #69a8bd; box-shadow: 0 7px 18px rgba(28, 66, 84, .1); transform: translateY(-1px); }
+        .candidate.selected { background: #f1f9fb; border-color: #2583a2; box-shadow: 0 0 0 2px rgba(37, 131, 162, .12); }
+        .candidate input { width: 20px; height: 20px; margin: 2px 0 0; flex: 0 0 auto; accent-color: #167596; }
+        .candidate-name { display: block; color: #183f52; font-size: 1.08rem; font-weight: 700; }
+        .affiliation { display: block; margin-top: 6px; color: #687b86; font-size: .9rem; line-height: 1.45; }
+        .empty { grid-column: 1 / -1; padding: 30px; text-align: center; background: #fff; border-radius: 10px; }
+        @media (max-width: 640px) {
+            .page { padding: 28px 14px 48px; }
+            .candidate-list { grid-template-columns: 1fr; }
+            .action-bar { margin-inline: -4px; }
+            .submit-button { padding-inline: 16px; }
+        }
+    </style>
 </head>
-
 <body>
+<main class="page">
+    <header class="page-header">
+        <p class="eyebrow">ONLINE VOTING</p>
+        <h1>{{ election.cycle.name }}</h1>
+        <p class="election-type">{{ election.get_office_display }}・{{ election.get_phase_display }}</p>
+    </header>
 
-<h1>{{ election }}</h1>
+    {% if election.office == "representative" %}
+        <p class="instruction">本選挙に推薦する会員を最大10名まで選択してください。</p>
+    {% else %}
+        <p class="instruction">投票する候補者を1名選択してください。</p>
+    {% endif %}
 
-{% if election.office == "representative" %}
-
-<p>
-    本選挙に推薦する会員を
-    最大10名まで選択してください。
-</p>
-
-<p>
-    選択人数:
-    <strong id="selected-count">0</strong>
-    / 10
-</p>
-
-{% endif %}
-
-
-<form
-    method="post"
-    action="{% url 'election:ballot_confirm' %}"
->
-
-    {% csrf_token %}
-
-    {% for candidate in candidates %}
-
-        <div>
-
-            <label>
-
-                <input
-                    type="checkbox"
-                    name="candidate"
-                    value="{{ candidate.pk }}"
-                    class="candidate-checkbox"
-                >
-
-                {{ candidate.member.last_name }}
-                {{ candidate.member.first_name }}
-
-                {% if candidate.member.representative_category == "corporate" %}
-                    【企業枠】
-                {% else %}
-                    【一般枠】
-                {% endif %}
-
-                {% if candidate.member.affiliation %}
-                    -
-                    {{ candidate.member.affiliation }}
-                {% endif %}
-
-            </label>
-
+    <form method="post" action="{% url 'election:ballot_confirm' %}">
+        {% csrf_token %}
+        <div class="action-bar">
+            <div class="selection-count">
+                選択人数: <strong id="selected-count">0</strong>
+                {% if election.office == "representative" %}/ 10{% endif %}
+            </div>
+            <button type="submit" class="submit-button">投票内容を確認</button>
         </div>
 
-    {% empty %}
-
-        <p>
-            候補者が登録されていません。
-        </p>
-
-    {% endfor %}
-
-    <p>
-        <button type="submit">
-            投票内容を確認
-        </button>
-    </p>
-
-</form>
-
+        <div class="candidate-list">
+            {% for candidate in candidates %}
+                <label class="candidate">
+                    <input
+                        type="{% if election.office == 'representative' %}checkbox{% else %}radio{% endif %}"
+                        name="candidate"
+                        value="{{ candidate.pk }}"
+                        class="candidate-checkbox"
+                        {% if candidate.pk in selected_candidate_ids %}checked{% endif %}
+                    >
+                    <span>
+                        <span class="candidate-name">{{ candidate.member.last_name }} {{ candidate.member.first_name }}</span>
+                        {% if candidate.member.affiliation %}
+                            <span class="affiliation">{{ candidate.member.affiliation }}</span>
+                        {% endif %}
+                    </span>
+                </label>
+            {% empty %}
+                <p class="empty">候補者が登録されていません。</p>
+            {% endfor %}
+        </div>
+    </form>
+</main>
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
+    const choices = document.querySelectorAll(".candidate-checkbox");
+    const counter = document.getElementById("selected-count");
+    const isRepresentative = "{{ election.office|escapejs }}" === "representative";
 
-    const checkboxes =
-        document.querySelectorAll(
-            ".candidate-checkbox"
-        );
-
-    const counter =
-        document.getElementById(
-            "selected-count"
-        );
-
-    function updateCount() {
-
-        const checked =
-            document.querySelectorAll(
-                ".candidate-checkbox:checked"
-            );
-
-        counter.textContent =
-            checked.length;
-
-        checkboxes.forEach(function (checkbox) {
-
-            if (
-                checked.length >= 10
-                && !checkbox.checked
-            ) {
-                checkbox.disabled = true;
-            } else {
-                checkbox.disabled = false;
+    function updateSelection() {
+        const checked = document.querySelectorAll(".candidate-checkbox:checked");
+        counter.textContent = checked.length;
+        choices.forEach(function (choice) {
+            choice.closest(".candidate").classList.toggle("selected", choice.checked);
+            if (isRepresentative) {
+                choice.disabled = checked.length >= 10 && !choice.checked;
             }
-
         });
     }
 
-    checkboxes.forEach(
-        function (checkbox) {
-
-            checkbox.addEventListener(
-                "change",
-                updateCount
-            );
-
-        }
-    );
-
-    updateCount();
+    choices.forEach(function (choice) {
+        choice.addEventListener("change", updateSelection);
+    });
+    updateSelection();
 });
 </script>
-
 </body>
 </html>

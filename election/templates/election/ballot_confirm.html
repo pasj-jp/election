@@ -2,15 +2,17 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>投票内容確認</title>
+    <title>{{ election.cycle.name }} - 投票内容確認</title>
 </head>
 
 <body>
 
-<h1>投票内容の確認</h1>
+<h1>{{ election.cycle.name }}</h1>
+
+<h2>投票内容の確認</h2>
 
 <p>
-    {{ election }}
+    {{ election.get_office_display }}・{{ election.get_phase_display }}
 </p>
 
 <p>
@@ -24,12 +26,6 @@
     <li>
         {{ candidate.member.last_name }}
         {{ candidate.member.first_name }}
-
-        {% if candidate.member.representative_category == "corporate" %}
-            【企業枠】
-        {% else %}
-            【一般枠】
-        {% endif %}
 
         {% if candidate.member.affiliation %}
             -
