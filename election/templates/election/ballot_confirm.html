@@ -2,66 +2,172 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ election.cycle.name }} - 投票内容確認</title>
+    <style>
+        :root {
+            color-scheme: light;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", sans-serif;
+            color: #243441;
+            background: #eef4f7;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; min-height: 100vh; }
+        .page { width: min(760px, 100%); margin: 0 auto; padding: 40px 20px 64px; }
+        .page-header { margin-bottom: 28px; }
+        .eyebrow { margin: 0 0 8px; color: #24718f; font-size: .82rem; font-weight: 700; letter-spacing: .12em; }
+        h1 { margin: 0; color: #153f55; font-size: clamp(1.65rem, 5vw, 2.5rem); line-height: 1.35; }
+        .election-type {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 16px 0 0;
+            color: #405b69;
+            font-size: 1.08rem;
+            font-weight: 600;
+        }
+        .election-phase {
+            display: inline-block;
+            padding: 7px 14px;
+            color: #fff;
+            background: #167596;
+            border-radius: 999px;
+            box-shadow: 0 3px 8px rgba(22, 117, 150, .2);
+            font-size: 1.18rem;
+            font-weight: 600;
+            letter-spacing: .04em;
+        }
+        .confirm-panel {
+            overflow: hidden;
+            background: #fff;
+            border: 1px solid #d7e3e9;
+            border-radius: 14px;
+            box-shadow: 0 12px 32px rgba(26, 67, 87, .1);
+        }
+        .panel-header { padding: 22px 24px; border-bottom: 1px solid #e1eaee; }
+        h2 { margin: 0 0 8px; color: #183f52; font-size: 1.35rem; }
+        .panel-header p { margin: 0; color: #617581; line-height: 1.7; }
+        .candidate-list { display: grid; gap: 10px; margin: 0; padding: 20px 24px; list-style: none; }
+        .candidate {
+            display: flex;
+            align-items: center;
+            gap: 13px;
+            padding: 15px 17px;
+            background: #f5fafc;
+            border: 1px solid #d7e7ed;
+            border-radius: 9px;
+        }
+        .candidate-number {
+            display: grid;
+            place-items: center;
+            width: 28px;
+            height: 28px;
+            flex: 0 0 auto;
+            color: #fff;
+            background: #3888a3;
+            border-radius: 50%;
+            font-size: .84rem;
+            font-weight: 700;
+        }
+        .candidate-name { color: #183f52; font-size: 1.06rem; font-weight: 700; }
+        .affiliation { display: block; margin-top: 4px; color: #6a7d87; font-size: .9rem; }
+        .summary {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            padding: 17px 24px;
+            background: #f0f7fa;
+            border-top: 1px solid #dbe8ed;
+        }
+        .summary p { margin: 0; color: #526975; }
+        .summary strong { color: #126b8c; font-size: 1.3rem; }
+        .actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 20px;
+        }
+        .vote-button {
+            padding: 13px 24px;
+            color: #fff;
+            background: #167596;
+            border: 0;
+            border-radius: 8px;
+            box-shadow: 0 5px 12px rgba(22, 117, 150, .22);
+            cursor: pointer;
+            font: inherit;
+            font-weight: 700;
+        }
+        .vote-button:hover { background: #105d78; }
+        .back-link {
+            display: inline-block;
+            padding: 12px 18px;
+            color: #315d70;
+            background: #fff;
+            border: 1px solid #b9ccd5;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .back-link:hover { background: #f5f9fa; }
+        .notice { margin: 18px 0 0; color: #687b86; font-size: .9rem; text-align: right; }
+        @media (max-width: 560px) {
+            .page { padding: 28px 14px 48px; }
+            .panel-header, .candidate-list { padding-inline: 17px; }
+            .summary { padding-inline: 17px; }
+            .actions { flex-direction: column-reverse; align-items: stretch; }
+            .actions form, .vote-button, .back-link { width: 100%; text-align: center; }
+        }
+    </style>
 </head>
-
 <body>
+<main class="page">
+    <header class="page-header">
+        <p class="eyebrow">VOTE CONFIRMATION</p>
+        <h1>{{ election.cycle.name }}</h1>
+        <p class="election-type">
+            <span>{{ election.get_office_display }}</span>
+            <span class="election-phase">{{ election.get_phase_display }}</span>
+        </p>
+    </header>
 
-<h1>{{ election.cycle.name }}</h1>
+    <section class="confirm-panel">
+        <div class="panel-header">
+            <h2>投票内容の確認</h2>
+            <p>以下の候補者を選択しています。内容をご確認ください。</p>
+        </div>
 
-<h2>投票内容の確認</h2>
+        <ol class="candidate-list">
+            {% for candidate in candidates %}
+                <li class="candidate">
+                    <span class="candidate-number">{{ forloop.counter }}</span>
+                    <span>
+                        <span class="candidate-name">{{ candidate.member.last_name }} {{ candidate.member.first_name }}</span>
+                        {% if candidate.member.affiliation %}
+                            <span class="affiliation">{{ candidate.member.affiliation }}</span>
+                        {% endif %}
+                    </span>
+                </li>
+            {% endfor %}
+        </ol>
 
-<p>
-    {{ election.get_office_display }}・{{ election.get_phase_display }}
-</p>
+        <div class="summary">
+            <p>選択人数</p>
+            <p><strong>{{ candidates|length }}</strong> 名</p>
+        </div>
+    </section>
 
-<p>
-    以下の候補者を選択しています。
-</p>
-
-<ul>
-
-{% for candidate in candidates %}
-
-    <li>
-        {{ candidate.member.last_name }}
-        {{ candidate.member.first_name }}
-
-        {% if candidate.member.affiliation %}
-            -
-            {{ candidate.member.affiliation }}
-        {% endif %}
-    </li>
-
-{% endfor %}
-
-</ul>
-
-<p>
-    選択人数:
-    {{ candidates|length }} 名
-</p>
-
-
-<form
-    method="post"
-    action="{% url 'election:ballot_submit' %}"
->
-
-    {% csrf_token %}
-
-    <button type="submit">
-        この内容で投票する
-    </button>
-
-</form>
-
-
-<p>
-    <a href="{% url 'election:ballot' %}">
-        選択画面へ戻る
-    </a>
-</p>
-
+    <div class="actions">
+        <a href="{% url 'election:ballot' %}" class="back-link">選択画面へ戻る</a>
+        <form method="post" action="{% url 'election:ballot_submit' %}">
+            {% csrf_token %}
+            <button type="submit" class="vote-button">この内容で投票する</button>
+        </form>
+    </div>
+    <p class="notice">「この内容で投票する」を押すと投票が確定します。</p>
+</main>
 </body>
 </html>

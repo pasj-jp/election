@@ -17,7 +17,27 @@
         .page-header { margin-bottom: 28px; }
         .eyebrow { margin: 0 0 8px; color: #24718f; font-size: .82rem; font-weight: 700; letter-spacing: .12em; }
         h1 { margin: 0; color: #153f55; font-size: clamp(1.65rem, 5vw, 2.5rem); line-height: 1.35; }
-        .election-type { margin: 10px 0 0; color: #607482; }
+        .election-type {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 16px 0 0;
+            color: #405b69;
+            font-size: 1.08rem;
+            font-weight: 600;
+        }
+        .election-phase {
+            display: inline-block;
+            padding: 7px 14px;
+            color: #fff;
+            background: #167596;
+            border-radius: 999px;
+            box-shadow: 0 3px 8px rgba(22, 117, 150, .2);
+            font-size: 1.18rem;
+            font-weight: 600;
+            letter-spacing: .04em;
+        }
         .instruction { margin: 0 0 20px; line-height: 1.8; }
         .action-bar {
             position: sticky;
@@ -82,7 +102,10 @@
     <header class="page-header">
         <p class="eyebrow">ONLINE VOTING</p>
         <h1>{{ election.cycle.name }}</h1>
-        <p class="election-type">{{ election.get_office_display }}・{{ election.get_phase_display }}</p>
+        <p class="election-type">
+            <span>{{ election.get_office_display }}</span>
+            <span class="election-phase">{{ election.get_phase_display }}</span>
+        </p>
     </header>
 
     {% if election.office == "representative" %}
