@@ -11,8 +11,8 @@ class Migration(migrations.Migration):
         migrations.AlterModelOptions(
             name="voterparticipation",
             options={
-                "verbose_name": "投票資格者",
-                "verbose_name_plural": "投票資格者",
+                "verbose_name": "有権者",
+                "verbose_name_plural": "有権者",
             },
         ),
     ]
