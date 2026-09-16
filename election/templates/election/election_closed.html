@@ -1,17 +1,20 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>投票受付期間外</title>
-</head>
+{% extends "election/voting_base.html" %}
 
-<body>
+{% block title %}{{ election.cycle.name }} - 投票受付期間外{% endblock %}
+{% block body_class %}centered-page{% endblock %}
 
-<h1>{{ election }}</h1>
-
-<p>
-    現在、この選挙は投票受付期間外です。
-</p>
-
-</body>
-</html>
+{% block content %}
+<main class="status-card">
+    <div class="status-main">
+        <div class="status-icon status-icon--warning" aria-hidden="true">!</div>
+        <p class="eyebrow">VOTING CLOSED</p>
+        <h1>投票受付期間外です</h1>
+        <p class="election-name">{{ election.cycle.name }}</p>
+        <p class="status-election-type">{{ election.get_office_display }}・{{ election.get_phase_display }}</p>
+    </div>
+    <div class="status-note">
+        <p>現在、この選挙では投票を受け付けていません。</p>
+        <p>投票期間をご確認ください。</p>
+    </div>
+</main>
+{% endblock %}

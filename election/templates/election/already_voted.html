@@ -1,21 +1,20 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>投票済み</title>
-</head>
+{% extends "election/voting_base.html" %}
 
-<body>
+{% block title %}{{ election.cycle.name }} - 投票済み{% endblock %}
+{% block body_class %}centered-page{% endblock %}
 
-<h1>{{ election }}</h1>
-
-<p>
-    この投票URLでは、すでに投票が完了しています。
-</p>
-
-<p>
-    同じURLから再度投票することはできません。
-</p>
-
-</body>
-</html>
+{% block content %}
+<main class="status-card">
+    <div class="status-main">
+        <div class="status-icon" aria-hidden="true">✓</div>
+        <p class="eyebrow">ALREADY VOTED</p>
+        <h1>すでに投票が完了しています</h1>
+        <p class="election-name">{{ election.cycle.name }}</p>
+        <p class="status-election-type">{{ election.get_office_display }}・{{ election.get_phase_display }}</p>
+    </div>
+    <div class="status-note">
+        <p>この投票URLでの投票は、すでに受け付けられています。</p>
+        <p>同じURLから再度投票することはできません。この画面を閉じてください。</p>
+    </div>
+</main>
+{% endblock %}

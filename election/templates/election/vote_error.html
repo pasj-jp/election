@@ -1,23 +1,20 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>投票エラー</title>
-</head>
+{% extends "election/voting_base.html" %}
 
-<body>
+{% block title %}{{ election.cycle.name }} - 投票エラー{% endblock %}
+{% block body_class %}centered-page{% endblock %}
 
-<h1>投票内容を確認してください</h1>
-
-<p>
-    {{ message }}
-</p>
-
-<p>
-    <a href="{% url 'election:ballot' %}">
-        投票画面へ戻る
-    </a>
-</p>
-
-</body>
-</html>
+{% block content %}
+<main class="status-card">
+    <div class="status-main">
+        <div class="status-icon status-icon--error" aria-hidden="true">!</div>
+        <p class="eyebrow">PLEASE CHECK</p>
+        <h1>投票内容を確認してください</h1>
+        <p class="election-name">{{ election.cycle.name }}</p>
+        <p class="error-message">{{ message }}</p>
+    </div>
+    <div class="status-note">
+        <p>候補者の選択内容を修正して、もう一度お試しください。</p>
+        <a href="{% url 'election:ballot' %}" class="secondary-button">投票画面へ戻る</a>
+    </div>
+</main>
+{% endblock %}
