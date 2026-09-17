@@ -13,7 +13,7 @@ from election.models import (
 
 
 class Command(BaseCommand):
-    help = "代議員本選挙の境界同票抽選を実行します"
+    help = "本選挙の同票抽選を実行します"
 
     def add_arguments(self, parser):
 
@@ -28,6 +28,7 @@ class Command(BaseCommand):
             choices=[
                 "general",
                 "corporate",
+                "president",
             ],
             required=True,
         )
@@ -50,7 +51,9 @@ class Command(BaseCommand):
                 .get(
                     election__cycle__year=year,
                     election__office=(
-                        Election.Office.REPRESENTATIVE
+                        Election.Office.PRESIDENT
+                        if category == "president"
+                        else Election.Office.REPRESENTATIVE
                     ),
                     election__phase=(
                         Election.Phase.FINAL

@@ -38,9 +38,15 @@ def preview_preliminary_count(election):
     except Election.DoesNotExist as exc:
         raise ValidationError("対応する本選挙が存在しません。") from exc
 
-    if final.status != Election.Status.DRAFT:
+    if (
+        election.status == Election.Status.CLOSED
+        and final.status != Election.Status.DRAFT
+    ):
         raise ValidationError("本選挙が準備中ではありません。")
-    if Ballot.objects.filter(election=final).exists():
+    if (
+        election.status == Election.Status.CLOSED
+        and Ballot.objects.filter(election=final).exists()
+    ):
         raise ValidationError("本選挙の投票データが既に存在します。")
 
     threshold = NOMINATION_THRESHOLDS[election.office]
@@ -70,7 +76,7 @@ def preview_preliminary_count(election):
         "threshold": threshold,
         "candidates": candidates,
         "qualified": qualified,
-        "can_confirm": True,
+        "can_confirm": election.status == Election.Status.CLOSED,
     }
 
 
@@ -126,6 +132,14 @@ def preview_president_final_count(election):
         raise ValidationError("会長候補者が存在しません。")
     top_vote = candidates[0].vote_count
     top_candidates = [c for c in candidates if c.vote_count == top_vote]
+    lottery = (
+        LotteryDraw.objects.filter(
+            election=election,
+            category=LotteryDraw.Category.PRESIDENT,
+        )
+        .order_by("-created_at")
+        .first()
+    )
     return {
         "kind": "president_final",
         "election": election,
@@ -133,7 +147,9 @@ def preview_president_final_count(election):
         "candidates": candidates,
         "top_candidates": top_candidates,
         "winner": top_candidates[0] if len(top_candidates) == 1 else None,
-        "can_confirm": len(top_candidates) == 1,
+        "lottery_required": len(top_candidates) > 1,
+        "lottery_executed": bool(lottery and lottery.executed_at),
+        "can_confirm": election.status == Election.Status.CLOSED,
     }
 
 
@@ -142,15 +158,42 @@ def commit_president_final_count(election):
     election = Election.objects.select_for_update().get(pk=election.pk)
     preview = preview_president_final_count(election)
     if not preview["can_confirm"]:
-        raise ValidationError("最多得票が同票のため確定できません。")
-    winner = preview["winner"]
-    for candidate in preview["candidates"]:
-        candidate.status = (
-            Candidate.Status.ELECTED
-            if candidate.pk == winner.pk
-            else Candidate.Status.NOT_ELECTED
+        raise ValidationError("投票終了後の選挙だけ開票を確定できます。")
+    if preview["lottery_required"]:
+        LotteryDraw.objects.filter(
+            election=election,
+            category=LotteryDraw.Category.PRESIDENT,
+            executed_at__isnull=True,
+        ).delete()
+        lottery = LotteryDraw.objects.create(
+            election=election,
+            category=LotteryDraw.Category.PRESIDENT,
+            vote_count=preview["top_candidates"][0].vote_count,
+            seats_remaining=1,
         )
-        candidate.save(update_fields=["status"])
+        LotteryCandidate.objects.bulk_create([
+            LotteryCandidate(lottery=lottery, candidate=candidate)
+            for candidate in preview["top_candidates"]
+        ])
+        top_candidate_ids = {
+            candidate.pk for candidate in preview["top_candidates"]
+        }
+        for candidate in preview["candidates"]:
+            candidate.status = (
+                Candidate.Status.LOTTERY
+                if candidate.pk in top_candidate_ids
+                else Candidate.Status.NOT_ELECTED
+            )
+            candidate.save(update_fields=["status"])
+    else:
+        winner = preview["winner"]
+        for candidate in preview["candidates"]:
+            candidate.status = (
+                Candidate.Status.ELECTED
+                if candidate.pk == winner.pk
+                else Candidate.Status.NOT_ELECTED
+            )
+            candidate.save(update_fields=["status"])
     election.status = Election.Status.COUNTED
     election.save(update_fields=["status"])
     return preview
@@ -167,6 +210,8 @@ def preview_election_count(election):
 
 
 def commit_election_count(election):
+    if election.status != Election.Status.CLOSED:
+        raise ValidationError("投票終了後の選挙だけ開票を確定できます。")
     if election.phase == Election.Phase.PRELIMINARY:
         return commit_preliminary_count(election)
     if election.office == Election.Office.PRESIDENT:
@@ -345,10 +390,13 @@ def preview_representative_final_count(
     #
     # 既に抽選実行済みなら再開票禁止
     #
-    if LotteryDraw.objects.filter(
-        election=election,
-        executed_at__isnull=False,
-    ).exists():
+    if (
+        election.status == Election.Status.CLOSED
+        and LotteryDraw.objects.filter(
+            election=election,
+            executed_at__isnull=False,
+        ).exists()
+    ):
         raise ValidationError(
             "抽選実行済みのため、再開票できません。"
         )
@@ -374,6 +422,7 @@ def preview_representative_final_count(
         ),
         "general": general,
         "corporate": corporate,
+        "can_confirm": election.status == Election.Status.CLOSED,
     }
 
 

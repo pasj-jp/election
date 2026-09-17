@@ -7,7 +7,7 @@
 <div class="module">
     <h2>集計結果</h2>
     <div style="padding:16px;">
-        <p><strong>Ballot数:</strong> {{ preview.ballot_count }}</p>
+        <p><strong>投票総数:</strong> {{ preview.ballot_count }}</p>
 
         {% if preview.kind == "preliminary" %}
             <p><strong>本選挙進出基準:</strong> {{ preview.threshold }}票以上</p>
@@ -18,10 +18,23 @@
                 {{ preview.winner.member.first_name }}
                 （{{ preview.winner.vote_count }}票）
             </p>
-        {% else %}
+        {% elif preview.lottery_required %}
             <p style="color:#ba2121;"><strong>
-                最多得票が同票のため、この画面では結果を確定できません。
+                {% if preview.can_confirm %}
+                    最多得票が同票のため、開票確定後に抽選が必要です。
+                {% elif preview.lottery_executed %}
+                    最多得票者の抽選は実行済みです。
+                {% else %}
+                    最多得票者は抽選対象です。
+                {% endif %}
             </strong></p>
+        {% endif %}
+
+        {% if preview.can_confirm %}
+            <form method="post" action="{% url 'admin:election_election_count_confirm' election.pk %}">
+                {% csrf_token %}
+                <input type="submit" value="この内容で開票を確定" class="default">
+            </form>
         {% endif %}
     </div>
 </div>
@@ -42,6 +55,8 @@
                 <td>
                     {% if preview.kind == "preliminary" %}
                         {% if candidate.will_qualify %}本選挙進出{% else %}基準未達{% endif %}
+                    {% elif preview.lottery_executed %}
+                        {% if candidate.status == "elected" %}当選{% else %}落選{% endif %}
                     {% else %}
                         {% if preview.winner %}
                             {% if candidate == preview.winner %}当選{% else %}落選{% endif %}
@@ -61,12 +76,6 @@
 </div>
 
 <div class="submit-row">
-    {% if preview.can_confirm %}
-        <form method="post" action="{% url 'admin:election_election_count_confirm' election.pk %}">
-            {% csrf_token %}
-            <input type="submit" value="この内容で開票を確定" class="default">
-        </form>
-    {% endif %}
     <a href="{% url 'admin:election_election_change' election.pk %}" class="button">キャンセル</a>
 </div>
 
