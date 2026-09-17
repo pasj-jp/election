@@ -117,6 +117,24 @@ class ElectionAdmin(admin.ModelAdmin):
         "office",
     )
 
+    def response_add(self, request, obj, post_url_continue=None):
+        if obj.phase == Election.Phase.PRELIMINARY:
+            candidate_count = obj.candidates.count()
+            if candidate_count:
+                self.message_user(
+                    request,
+                    f"候補者を{candidate_count}名、自動生成しました。",
+                    messages.SUCCESS,
+                )
+            else:
+                self.message_user(
+                    request,
+                    "候補者は生成されませんでした。"
+                    "先にこの年度の会員名簿を取り込んでください。",
+                    messages.WARNING,
+                )
+        return super().response_add(request, obj, post_url_continue)
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
 

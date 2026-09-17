@@ -240,3 +240,70 @@ class MemberCsvImportAdminTest(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertIn(reverse("admin:login"), response.url)
+
+
+class PreliminaryElectionCandidateGenerationTest(TestCase):
+
+    def setUp(self):
+        self.cycle = ElectionCycle.objects.create(
+            year=2028,
+            name="2028年度選挙",
+        )
+        self.eligible_member = MemberSnapshot.objects.create(
+            cycle=self.cycle,
+            member_no="m001",
+            last_name="山田",
+            first_name="太郎",
+            email="taro@example.com",
+            employee_type="正会員",
+            representative_category=(
+                MemberSnapshot.RepresentativeCategory.GENERAL
+            ),
+            is_eligible_voter=True,
+        )
+        self.ineligible_member = MemberSnapshot.objects.create(
+            cycle=self.cycle,
+            member_no="m002",
+            last_name="佐藤",
+            first_name="花子",
+            email="hanako@example.com",
+            employee_type="準会員",
+            representative_category=(
+                MemberSnapshot.RepresentativeCategory.GENERAL
+            ),
+            is_eligible_voter=False,
+        )
+
+    def create_election(self, phase):
+        now = timezone.now()
+        return Election.objects.create(
+            cycle=self.cycle,
+            office=Election.Office.PRESIDENT,
+            phase=phase,
+            start_at=now,
+            end_at=now + timedelta(days=1),
+        )
+
+    def test_candidates_are_generated_when_preliminary_is_created(self):
+        election = self.create_election(Election.Phase.PRELIMINARY)
+
+        candidates = Candidate.objects.filter(election=election)
+        self.assertEqual(candidates.count(), 1)
+        self.assertEqual(candidates.get().member, self.eligible_member)
+        self.assertEqual(candidates.get().status, Candidate.Status.ELIGIBLE)
+
+    def test_candidates_are_not_generated_for_final_election(self):
+        election = self.create_election(Election.Phase.FINAL)
+
+        self.assertFalse(Candidate.objects.filter(election=election).exists())
+
+    def test_editing_preliminary_does_not_generate_candidates_again(self):
+        election = self.create_election(Election.Phase.PRELIMINARY)
+
+        election.end_at += timedelta(days=1)
+        election.save()
+
+        self.assertEqual(
+            Candidate.objects.filter(election=election).count(),
+            1,
+        )
