@@ -21,13 +21,13 @@
 
         {% endif %}
 
-        {% if original.status == "closed" %}
+        {% if original.status == "closed" or original.status == "counted" %}
 
             <li>
                 <a
                     href="{% url 'admin:election_election_count_preview' original.pk %}"
                 >
-                    開票する
+                    開票プレビュー
                 </a>
             </li>
 

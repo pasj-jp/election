@@ -18,9 +18,23 @@
     <div style="padding:16px;">
 
         <p>
-            <strong>Ballot数:</strong>
+            <strong>投票総数:</strong>
             {{ preview.ballot_count }}
         </p>
+
+        {% if preview.can_confirm %}
+            <form
+                method="post"
+                action="{% url 'admin:election_election_count_confirm' election.pk %}"
+            >
+                {% csrf_token %}
+                <input
+                    type="submit"
+                    value="この内容で開票を確定"
+                    class="default"
+                >
+            </form>
+        {% endif %}
 
     </div>
 
@@ -312,23 +326,6 @@
 
 
 <div class="submit-row">
-
-    <form
-        method="post"
-        action="{% url 'admin:election_election_count_confirm' election.pk %}"
-    >
-
-        {% csrf_token %}
-
-        <input
-            type="submit"
-            value="この内容で開票を確定"
-            class="default"
-        >
-
-    </form>
-
-
     <a
         href="{% url 'admin:election_election_change' election.pk %}"
         class="button"
@@ -339,6 +336,7 @@
 </div>
 
 
+{% if preview.can_confirm %}
 <p style="
     margin-top:20px;
     color:#ba2121;
@@ -350,5 +348,6 @@
     候補者の当選・落選・抽選対象状態がDBへ保存されます。
 
 </p>
+{% endif %}
 
 {% endblock %}

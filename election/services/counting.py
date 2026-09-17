@@ -38,9 +38,15 @@ def preview_preliminary_count(election):
     except Election.DoesNotExist as exc:
         raise ValidationError("対応する本選挙が存在しません。") from exc
 
-    if final.status != Election.Status.DRAFT:
+    if (
+        election.status == Election.Status.CLOSED
+        and final.status != Election.Status.DRAFT
+    ):
         raise ValidationError("本選挙が準備中ではありません。")
-    if Ballot.objects.filter(election=final).exists():
+    if (
+        election.status == Election.Status.CLOSED
+        and Ballot.objects.filter(election=final).exists()
+    ):
         raise ValidationError("本選挙の投票データが既に存在します。")
 
     threshold = NOMINATION_THRESHOLDS[election.office]
@@ -70,7 +76,7 @@ def preview_preliminary_count(election):
         "threshold": threshold,
         "candidates": candidates,
         "qualified": qualified,
-        "can_confirm": True,
+        "can_confirm": election.status == Election.Status.CLOSED,
     }
 
 
@@ -133,7 +139,10 @@ def preview_president_final_count(election):
         "candidates": candidates,
         "top_candidates": top_candidates,
         "winner": top_candidates[0] if len(top_candidates) == 1 else None,
-        "can_confirm": len(top_candidates) == 1,
+        "can_confirm": (
+            election.status == Election.Status.CLOSED
+            and len(top_candidates) == 1
+        ),
     }
 
 
@@ -167,6 +176,8 @@ def preview_election_count(election):
 
 
 def commit_election_count(election):
+    if election.status != Election.Status.CLOSED:
+        raise ValidationError("投票終了後の選挙だけ開票を確定できます。")
     if election.phase == Election.Phase.PRELIMINARY:
         return commit_preliminary_count(election)
     if election.office == Election.Office.PRESIDENT:
@@ -345,10 +356,13 @@ def preview_representative_final_count(
     #
     # 既に抽選実行済みなら再開票禁止
     #
-    if LotteryDraw.objects.filter(
-        election=election,
-        executed_at__isnull=False,
-    ).exists():
+    if (
+        election.status == Election.Status.CLOSED
+        and LotteryDraw.objects.filter(
+            election=election,
+            executed_at__isnull=False,
+        ).exists()
+    ):
         raise ValidationError(
             "抽選実行済みのため、再開票できません。"
         )
@@ -374,6 +388,7 @@ def preview_representative_final_count(
         ),
         "general": general,
         "corporate": corporate,
+        "can_confirm": election.status == Election.Status.CLOSED,
     }
 
 

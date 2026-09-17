@@ -9,12 +9,15 @@ from django.utils import timezone
 
 from .admin import CandidateAdmin, order_admin_models
 from .models import (
+    Ballot,
+    BallotChoice,
     Candidate,
     Election,
     ElectionCycle,
     MemberSnapshot,
     VoterParticipation,
 )
+from .services.counting import preview_election_count
 
 
 CSV_HEADER = (
@@ -323,3 +326,77 @@ class PreliminaryElectionCandidateGenerationTest(TestCase):
             VoterParticipation.objects.filter(election=election).count(),
             1,
         )
+
+
+class CountPreviewTest(TestCase):
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="count-admin",
+            email="count@example.com",
+            password="password",
+        )
+        self.client.force_login(self.user)
+        self.cycle = ElectionCycle.objects.create(
+            year=2029,
+            name="2029年度選挙",
+        )
+        now = timezone.now()
+        self.election = Election.objects.create(
+            cycle=self.cycle,
+            office=Election.Office.PRESIDENT,
+            phase=Election.Phase.FINAL,
+            status=Election.Status.COUNTED,
+            start_at=now - timedelta(days=2),
+            end_at=now - timedelta(days=1),
+        )
+        candidates = []
+        for number, name in (("m001", "山田"), ("m002", "佐藤")):
+            member = MemberSnapshot.objects.create(
+                cycle=self.cycle,
+                member_no=number,
+                last_name=name,
+                first_name="太郎",
+                email=f"{number}@example.com",
+                employee_type="正会員",
+                representative_category=(
+                    MemberSnapshot.RepresentativeCategory.GENERAL
+                ),
+                is_eligible_voter=True,
+            )
+            candidates.append(Candidate.objects.create(
+                election=self.election,
+                member=member,
+                status=Candidate.Status.QUALIFIED,
+            ))
+        low_vote, high_vote = candidates
+        for candidate in (high_vote, high_vote, low_vote):
+            ballot = Ballot.objects.create(election=self.election)
+            BallotChoice.objects.create(
+                ballot=ballot,
+                candidate=candidate,
+            )
+        self.low_vote = low_vote
+        self.high_vote = high_vote
+
+    def test_candidates_are_ordered_by_vote_count_descending(self):
+        preview = preview_election_count(self.election)
+
+        self.assertEqual(
+            [candidate.pk for candidate in preview["candidates"]],
+            [self.high_vote.pk, self.low_vote.pk],
+        )
+
+    def test_counted_election_has_read_only_preview(self):
+        change_response = self.client.get(reverse(
+            "admin:election_election_change",
+            args=[self.election.pk],
+        ))
+        self.assertContains(change_response, "開票プレビュー")
+
+        preview_response = self.client.get(reverse(
+            "admin:election_election_count_preview",
+            args=[self.election.pk],
+        ))
+        self.assertContains(preview_response, "投票総数")
+        self.assertNotContains(preview_response, "この内容で開票を確定")
