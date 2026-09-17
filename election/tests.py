@@ -8,7 +8,13 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .admin import CandidateAdmin, order_admin_models
-from .models import Candidate, Election, ElectionCycle, MemberSnapshot
+from .models import (
+    Candidate,
+    Election,
+    ElectionCycle,
+    MemberSnapshot,
+    VoterParticipation,
+)
 
 
 CSV_HEADER = (
@@ -291,11 +297,17 @@ class PreliminaryElectionCandidateGenerationTest(TestCase):
         self.assertEqual(candidates.count(), 1)
         self.assertEqual(candidates.get().member, self.eligible_member)
         self.assertEqual(candidates.get().status, Candidate.Status.ELIGIBLE)
+        voters = VoterParticipation.objects.filter(election=election)
+        self.assertEqual(voters.count(), 1)
+        self.assertEqual(voters.get().member, self.eligible_member)
 
-    def test_candidates_are_not_generated_for_final_election(self):
+    def test_only_voters_are_generated_for_final_election(self):
         election = self.create_election(Election.Phase.FINAL)
 
         self.assertFalse(Candidate.objects.filter(election=election).exists())
+        voters = VoterParticipation.objects.filter(election=election)
+        self.assertEqual(voters.count(), 1)
+        self.assertEqual(voters.get().member, self.eligible_member)
 
     def test_editing_preliminary_does_not_generate_candidates_again(self):
         election = self.create_election(Election.Phase.PRELIMINARY)
@@ -305,5 +317,9 @@ class PreliminaryElectionCandidateGenerationTest(TestCase):
 
         self.assertEqual(
             Candidate.objects.filter(election=election).count(),
+            1,
+        )
+        self.assertEqual(
+            VoterParticipation.objects.filter(election=election).count(),
             1,
         )

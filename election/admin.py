@@ -118,6 +118,21 @@ class ElectionAdmin(admin.ModelAdmin):
     )
 
     def response_add(self, request, obj, post_url_continue=None):
+        voter_count = obj.voter_participations.count()
+        if voter_count:
+            self.message_user(
+                request,
+                f"有権者を{voter_count}名、自動生成しました。",
+                messages.SUCCESS,
+            )
+        else:
+            self.message_user(
+                request,
+                "有権者は生成されませんでした。"
+                "先にこの年度の会員名簿を取り込んでください。",
+                messages.WARNING,
+            )
+
         if obj.phase == Election.Phase.PRELIMINARY:
             candidate_count = obj.candidates.count()
             if candidate_count:
