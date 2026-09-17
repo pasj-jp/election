@@ -9,6 +9,7 @@ from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
 
+from .forms import MemberCsvImportForm
 from .models import (
     Ballot,
     Candidate,
@@ -29,6 +30,7 @@ from .services.lottery import (
     execute_lottery,
     preview_lottery,
 )
+from .services.member_import import MemberImportError, import_members
 
 
 admin.site.site_header = "加速器学会選挙システム"
@@ -694,6 +696,10 @@ class ElectionAdmin(admin.ModelAdmin):
 @admin.register(MemberSnapshot)
 class MemberSnapshotAdmin(admin.ModelAdmin):
 
+    change_list_template = (
+        "admin/election/membersnapshot/change_list.html"
+    )
+
     list_display = (
         "member_no",
         "last_name",
@@ -722,6 +728,58 @@ class MemberSnapshotAdmin(admin.ModelAdmin):
     ordering = (
         "member_no",
     )
+
+    def get_urls(self):
+        custom_urls = [
+            path(
+                "import-csv/",
+                self.admin_site.admin_view(self.import_csv_view),
+                name="election_membersnapshot_import_csv",
+            ),
+        ]
+        return custom_urls + super().get_urls()
+
+    def import_csv_view(self, request):
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+
+        form = MemberCsvImportForm(
+            request.POST or None,
+            request.FILES or None,
+        )
+        if request.method == "POST" and form.is_valid():
+            uploaded_file = form.cleaned_data["csv_file"]
+            try:
+                result = import_members(
+                    uploaded_file.read(),
+                    form.cleaned_data["cycle"],
+                )
+            except MemberImportError as exc:
+                form.add_error("csv_file", str(exc))
+            else:
+                self.message_user(
+                    request,
+                    "CSV名簿を取り込みました。"
+                    f" 新規: {result.created_count}件、"
+                    f"更新: {result.updated_count}件、"
+                    f"変更なし: {result.unchanged_count}件。",
+                    messages.SUCCESS,
+                )
+                for warning in result.warnings:
+                    self.message_user(request, warning, messages.WARNING)
+                return redirect("admin:election_membersnapshot_changelist")
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "form": form,
+            "title": "会員名簿CSV取り込み",
+        }
+        return render(
+            request,
+            "admin/election/membersnapshot/import_csv.html",
+            context,
+        )
 
 
 @admin.register(Candidate)

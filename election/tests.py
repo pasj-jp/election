@@ -1,12 +1,20 @@
 from datetime import timedelta
 
 from django.contrib import admin
-from django.test import SimpleTestCase
+from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from .admin import CandidateAdmin, order_admin_models
-from .models import Candidate, Election
+from .models import Candidate, Election, ElectionCycle, MemberSnapshot
+
+
+CSV_HEADER = (
+    "会員番号,会員名,会員種別,所属,所属所属機関名,"
+    "ＭＬ用メールアドレス\n"
+)
 
 
 class HomeViewTest(SimpleTestCase):
@@ -138,3 +146,97 @@ class ElectionVotingPeriodTest(SimpleTestCase):
         for election in elections:
             with self.subTest(election=election):
                 self.assertFalse(election.is_voting_open)
+
+
+class MemberCsvImportAdminTest(TestCase):
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="admin",
+            email="admin@example.com",
+            password="password",
+        )
+        self.client.force_login(self.user)
+        self.cycle = ElectionCycle.objects.create(
+            year=2027,
+            name="2027年度選挙",
+        )
+        self.url = reverse("admin:election_membersnapshot_import_csv")
+
+    def csv_file(self, body, encoding="utf-8-sig"):
+        return SimpleUploadedFile(
+            "members.csv",
+            (CSV_HEADER + body).encode(encoding),
+            content_type="text/csv",
+        )
+
+    def test_csv_can_be_uploaded_from_admin(self):
+        response = self.client.post(
+            self.url,
+            {
+                "cycle": self.cycle.pk,
+                "csv_file": self.csv_file(
+                    "m001,山田 太郎,正会員,企業関係,加速器株式会社,"
+                    "taro@example.com\n"
+                ),
+            },
+            follow=True,
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("admin:election_membersnapshot_changelist"),
+        )
+        member = MemberSnapshot.objects.get(
+            cycle=self.cycle,
+            member_no="m001",
+        )
+        self.assertEqual(member.last_name, "山田")
+        self.assertEqual(member.first_name, "太郎")
+        self.assertTrue(member.is_eligible_voter)
+        self.assertEqual(
+            member.representative_category,
+            MemberSnapshot.RepresentativeCategory.CORPORATE,
+        )
+        self.assertContains(response, "新規: 1件")
+
+    def test_cp932_csv_is_supported(self):
+        response = self.client.post(
+            self.url,
+            {
+                "cycle": self.cycle.pk,
+                "csv_file": self.csv_file(
+                    "m002,佐藤 花子,準会員,大学,加速器大学,"
+                    "hanako@example.com\n",
+                    encoding="cp932",
+                ),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            MemberSnapshot.objects.filter(member_no="m002").exists()
+        )
+
+    def test_invalid_csv_displays_error_without_importing(self):
+        response = self.client.post(
+            self.url,
+            {
+                "cycle": self.cycle.pk,
+                "csv_file": self.csv_file(
+                    "m001,姓だけ,正会員,大学,加速器大学,user@example.com\n"
+                ),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "会員名を姓と名に分割できません")
+        self.assertFalse(MemberSnapshot.objects.exists())
+
+    def test_anonymous_user_is_redirected_to_login(self):
+        self.client.logout()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("admin:login"), response.url)

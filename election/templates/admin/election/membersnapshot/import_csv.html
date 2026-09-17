@@ -1,0 +1,43 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">ホーム</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo; <a href="{% url 'admin:election_membersnapshot_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo; CSV取り込み
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+
+<p>
+    選挙年度と会員名簿CSVを選択してください。
+    同じ会員番号が既に存在する場合は、その会員情報を更新します。
+</p>
+
+<form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+    {% if form.non_field_errors %}{{ form.non_field_errors }}{% endif %}
+    <fieldset class="module aligned">
+        {% for field in form %}
+        <div class="form-row{% if field.errors %} errors{% endif %}">
+            {{ field.errors }}
+            <div>
+                {{ field.label_tag }}
+                {{ field }}
+                {% if field.help_text %}
+                    <div class="help">{{ field.help_text }}</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </fieldset>
+    <div class="submit-row">
+        <input type="submit" value="取り込む" class="default">
+        <a href="{% url 'admin:election_membersnapshot_changelist' %}" class="button">キャンセル</a>
+    </div>
+</form>
+{% endblock %}
