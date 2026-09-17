@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.db.models import Count, Q
@@ -8,6 +9,7 @@ from election.models import (
     Election,
     ElectionCycle,
 )
+from election.services.counting import commit_president_final_count
 
 
 class Command(BaseCommand):
@@ -123,7 +125,7 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.WARNING(
                     "最多得票が同票です。"
-                    "会長選挙の同票処理が必要です。"
+                    "開票確定後に抽選が必要です。"
                 )
             )
 
@@ -135,6 +137,22 @@ class Command(BaseCommand):
                     f"{candidate.vote_count}票"
                 )
 
+            if dry_run:
+                self.stdout.write(
+                    self.style.WARNING("*** DRY RUN ***")
+                )
+                return
+
+            try:
+                commit_president_final_count(election)
+            except ValidationError as exc:
+                raise CommandError(str(exc)) from exc
+            self.stdout.write(
+                self.style.WARNING(
+                    "抽選対象者を登録しました。"
+                    "続けて抽選を実行してください。"
+                )
+            )
             return
 
         winner = top_candidates[0]

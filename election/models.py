@@ -382,6 +382,11 @@ class LotteryDraw(models.Model):
     class Algorithm(models.TextChoices):
         SHA256_V1 = "sha256-v1", "SHA-256 v1"
 
+    class Category(models.TextChoices):
+        GENERAL = "general", "一般枠"
+        CORPORATE = "corporate", "企業枠"
+        PRESIDENT = "president", "会長"
+
     election = models.ForeignKey(
         Election,
         on_delete=models.PROTECT,
@@ -390,7 +395,7 @@ class LotteryDraw(models.Model):
 
     category = models.CharField(
         max_length=20,
-        choices=MemberSnapshot.RepresentativeCategory.choices,
+        choices=Category.choices,
     )
 
     vote_count = models.PositiveIntegerField()

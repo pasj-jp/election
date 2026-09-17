@@ -423,7 +423,17 @@ class ElectionAdmin(admin.ModelAdmin):
                 if result["lottery_required"]
             )
 
-        if preview["kind"] != "representative_final":
+        if (
+            preview["kind"] == "president_final"
+            and preview["lottery_required"]
+        ):
+            self.message_user(
+                request,
+                "開票を確定しました。"
+                " 最多得票が同票のため抽選が必要です。",
+                level=messages.WARNING,
+            )
+        elif preview["kind"] != "representative_final":
             self.message_user(
                 request,
                 "開票を確定しました。",
@@ -1126,7 +1136,7 @@ class LotteryDrawAdmin(admin.ModelAdmin):
         )
 
     @admin.display(
-        description="枠",
+        description="区分",
     )
     def category_display(self, obj):
         return obj.get_category_display()

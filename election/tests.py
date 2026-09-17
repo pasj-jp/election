@@ -14,6 +14,7 @@ from .models import (
     Candidate,
     Election,
     ElectionCycle,
+    LotteryDraw,
     MemberSnapshot,
     VoterParticipation,
 )
@@ -400,3 +401,65 @@ class CountPreviewTest(TestCase):
         ))
         self.assertContains(preview_response, "投票総数")
         self.assertNotContains(preview_response, "この内容で開票を確定")
+
+    def test_tied_president_election_can_be_decided_by_lottery(self):
+        ballot = Ballot.objects.create(election=self.election)
+        BallotChoice.objects.create(
+            ballot=ballot,
+            candidate=self.low_vote,
+        )
+        self.election.status = Election.Status.CLOSED
+        self.election.save(update_fields=["status"])
+
+        response = self.client.post(reverse(
+            "admin:election_election_count_confirm",
+            args=[self.election.pk],
+        ))
+
+        self.assertEqual(response.status_code, 302)
+        self.election.refresh_from_db()
+        self.assertEqual(self.election.status, Election.Status.COUNTED)
+        lottery = LotteryDraw.objects.get(
+            election=self.election,
+            category=LotteryDraw.Category.PRESIDENT,
+        )
+        self.assertEqual(lottery.seats_remaining, 1)
+        self.assertEqual(lottery.candidates.count(), 2)
+        self.assertEqual(
+            Candidate.objects.filter(
+                election=self.election,
+                status=Candidate.Status.LOTTERY,
+            ).count(),
+            2,
+        )
+
+        preview_response = self.client.get(reverse(
+            "admin:election_lotterydraw_preview",
+            args=[lottery.pk],
+        ))
+        self.assertEqual(preview_response.status_code, 200)
+
+        execute_response = self.client.post(reverse(
+            "admin:election_lotterydraw_execute",
+            args=[lottery.pk],
+        ))
+        self.assertEqual(execute_response.status_code, 302)
+        self.assertEqual(
+            Candidate.objects.filter(
+                election=self.election,
+                status=Candidate.Status.ELECTED,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            Candidate.objects.filter(
+                election=self.election,
+                status=Candidate.Status.NOT_ELECTED,
+            ).count(),
+            1,
+        )
+        result_response = self.client.get(reverse(
+            "admin:election_election_count_preview",
+            args=[self.election.pk],
+        ))
+        self.assertContains(result_response, "抽選は実行済みです")
