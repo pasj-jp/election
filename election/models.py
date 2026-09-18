@@ -291,6 +291,14 @@ class Candidate(models.Model):
             f"{self.member.last_name} {self.member.first_name}"
         )
 
+    @property
+    def route_label(self):
+        labels = {
+            self.Status.QUALIFIED: "(推)",
+            self.Status.ACCEPTED: "(立)",
+        }
+        return labels.get(self.status, "")
+
     def clean(self):
         super().clean()
         if (

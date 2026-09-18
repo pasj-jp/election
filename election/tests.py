@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.core.management.base import CommandError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase
 from django.template.loader import render_to_string
@@ -11,6 +12,7 @@ from django.utils import timezone
 
 from .admin import CandidateAdmin, order_admin_models
 from .forms import ElectionAdminForm
+from .management.command_utils import get_selected_election
 from .models import (
     Ballot,
     BallotChoice,
@@ -660,6 +662,25 @@ class RepresentativeElectionRulesTest(TestCase):
                     "submitted_at": self.now,
                 })
                 self.assertIn("代議員（企業枠）・予備選挙", rendered)
+
+    def test_command_election_selection_uses_representative_category(self):
+        corporate = self.create_election(
+            Election.Phase.PRELIMINARY,
+            Election.RepresentativeCategory.CORPORATE,
+        )
+        options = {
+            "office": Election.Office.REPRESENTATIVE,
+            "phase": Election.Phase.PRELIMINARY,
+            "category": Election.RepresentativeCategory.CORPORATE,
+        }
+
+        self.assertEqual(
+            get_selected_election(self.cycle, options),
+            corporate,
+        )
+        options["category"] = None
+        with self.assertRaises(CommandError):
+            get_selected_election(self.cycle, options)
 
 
 class ElectionAdminFormTest(TestCase):

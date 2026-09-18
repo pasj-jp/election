@@ -8,6 +8,11 @@ from django.db import transaction
 from django.template.loader import render_to_string
 from django.utils import timezone
 
+from election.management.command_utils import (
+    add_category_argument,
+    get_selected_election,
+)
+
 from election.models import (
     Election,
     ElectionCycle,
@@ -57,7 +62,7 @@ class Command(BaseCommand):
             required=True,
             help="会員番号。例: m151114",
         )
-        parser.add_argument("--category", choices=["general", "corporate"])
+        add_category_argument(parser)
 
         parser.add_argument(
             "--base-url",
@@ -72,11 +77,6 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
 
         year = options["cycle"]
-        office = options["office"]
-        phase = options["phase"]
-        category = options["category"] or ""
-        if office == Election.Office.REPRESENTATIVE and not category:
-            raise CommandError("代議員選挙では--categoryを指定してください。")
         member_no = options["member"]
         base_url = options["base_url"]
         dry_run = options["dry_run"]
@@ -98,17 +98,7 @@ class Command(BaseCommand):
                 "ElectionCycleが存在しません。"
             )
 
-        try:
-            election = Election.objects.get(
-                cycle=cycle,
-                office=office,
-                phase=phase,
-                representative_category=category,
-            )
-        except Election.DoesNotExist:
-            raise CommandError(
-                "Electionが存在しません。"
-            )
+        election = get_selected_election(cycle, options)
 
         if election.status in [
             Election.Status.CLOSED,

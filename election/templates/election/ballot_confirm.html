@@ -24,7 +24,7 @@
                     <span class="candidate-number">{{ forloop.counter }}</span>
                     <span>
                         <span class="candidate-name">
-                            {{ candidate.member.last_name }} {{ candidate.member.first_name }}{% if show_candidate_route_labels %}{% if candidate.status == "qualified" %}(推){% elif candidate.status == "accepted" %}(立){% endif %}{% endif %}
+                            {% include "election/includes/candidate_name.html" %}
                         </span>
                         {% if candidate.member.affiliation %}
                             <span class="affiliation">{{ candidate.member.affiliation }}</span>

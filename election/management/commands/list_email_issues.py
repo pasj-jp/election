@@ -1,10 +1,11 @@
 from django.core.management.base import BaseCommand, CommandError
 
-from election.models import (
-    Election,
-    ElectionCycle,
-    VoterParticipation,
+from election.management.command_utils import (
+    add_category_argument,
+    get_selected_election,
 )
+
+from election.models import ElectionCycle, VoterParticipation
 
 
 class Command(BaseCommand):
@@ -37,7 +38,7 @@ class Command(BaseCommand):
             ],
             required=True,
         )
-        parser.add_argument("--category", choices=["general", "corporate"])
+        add_category_argument(parser)
 
         parser.add_argument(
             "--all",
@@ -47,11 +48,6 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         year = options["cycle"]
-        office = options["office"]
-        phase = options["phase"]
-        category = options["category"] or ""
-        if office == Election.Office.REPRESENTATIVE and not category:
-            raise CommandError("代議員選挙では--categoryを指定してください。")
         show_all = options["all"]
 
         try:
@@ -63,17 +59,7 @@ class Command(BaseCommand):
                 f"{year}年度のElectionCycleが存在しません。"
             )
 
-        try:
-            election = Election.objects.get(
-                cycle=cycle,
-                office=office,
-                phase=phase,
-                representative_category=category,
-            )
-        except Election.DoesNotExist:
-            raise CommandError(
-                "指定されたElectionが存在しません。"
-            )
+        election = get_selected_election(cycle, options)
 
         voters = (
             VoterParticipation.objects

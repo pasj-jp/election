@@ -1,6 +1,10 @@
 from django.core.management.base import BaseCommand, CommandError
 
-from election.models import Election, ElectionCycle
+from election.management.command_utils import (
+    add_category_argument,
+    get_selected_election,
+)
+from election.models import ElectionCycle
 from election.services.voter_generation import generate_voters
 
 
@@ -24,10 +28,7 @@ class Command(BaseCommand):
             choices=["preliminary", "final"],
             required=True,
         )
-        parser.add_argument(
-            "--category",
-            choices=["general", "corporate"],
-        )
+        add_category_argument(parser)
         parser.add_argument("--dry-run", action="store_true")
 
     def handle(self, *args, **options):
@@ -38,18 +39,7 @@ class Command(BaseCommand):
             raise CommandError(
                 f"{year}年度のElectionCycleが存在しません。"
             ) from exc
-        try:
-            category = options["category"] or ""
-            if options["office"] == Election.Office.REPRESENTATIVE and not category:
-                raise CommandError("代議員選挙では--categoryを指定してください。")
-            election = Election.objects.get(
-                cycle=cycle,
-                office=options["office"],
-                phase=options["phase"],
-                representative_category=category,
-            )
-        except Election.DoesNotExist as exc:
-            raise CommandError("指定したElectionが存在しません。") from exc
+        election = get_selected_election(cycle, options)
 
         dry_run = options["dry_run"]
         result = generate_voters(election, save=not dry_run)
