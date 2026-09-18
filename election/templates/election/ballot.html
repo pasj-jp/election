@@ -40,7 +40,9 @@
                         {% if candidate.pk in selected_candidate_ids %}checked{% endif %}
                     >
                     <span>
-                        <span class="candidate-name">{{ candidate.member.last_name }} {{ candidate.member.first_name }}</span>
+                        <span class="candidate-name">
+                            {{ candidate.member.last_name }} {{ candidate.member.first_name }}{% if show_candidate_route_labels %}{% if candidate.status == "qualified" %}(推){% elif candidate.status == "accepted" %}(立){% endif %}{% endif %}
+                        </span>
                         {% if candidate.member.affiliation %}
                             <span class="affiliation">{{ candidate.member.affiliation }}</span>
                         {% endif %}

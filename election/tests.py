@@ -22,7 +22,7 @@ from .models import (
     VoterParticipation,
 )
 from .services.counting import preview_election_count
-from .views import validate_vote
+from .views import should_show_candidate_route_labels, validate_vote
 
 
 CSV_HEADER = (
@@ -467,6 +467,47 @@ class CountPreviewTest(TestCase):
             args=[self.election.pk],
         ))
         self.assertContains(result_response, "抽選は実行済みです")
+
+    def test_candidate_route_labels_appear_only_when_accepted_exists(self):
+        self.high_vote.status = Candidate.Status.ACCEPTED
+        self.high_vote.save(update_fields=["status"])
+        candidates = list(
+            Candidate.objects.filter(election=self.election)
+            .select_related("member")
+            .order_by("member__member_no")
+        )
+        show_labels = should_show_candidate_route_labels(self.election)
+
+        self.assertTrue(show_labels)
+        for template_name in (
+            "election/ballot.html",
+            "election/ballot_confirm.html",
+        ):
+            with self.subTest(template_name=template_name):
+                rendered = render_to_string(template_name, {
+                    "election": self.election,
+                    "candidates": candidates,
+                    "vote_limit": self.election.vote_limit,
+                    "selected_candidate_ids": [],
+                    "show_candidate_route_labels": show_labels,
+                })
+                self.assertIn("山田 太郎(推)", rendered)
+                self.assertIn("佐藤 太郎(立)", rendered)
+
+        self.high_vote.status = Candidate.Status.QUALIFIED
+        self.high_vote.save(update_fields=["status"])
+        self.assertFalse(
+            should_show_candidate_route_labels(self.election)
+        )
+        rendered = render_to_string("election/ballot.html", {
+            "election": self.election,
+            "candidates": candidates,
+            "vote_limit": self.election.vote_limit,
+            "selected_candidate_ids": [],
+            "show_candidate_route_labels": False,
+        })
+        self.assertNotIn("(推)", rendered)
+        self.assertNotIn("(立)", rendered)
 
 
 class RepresentativeElectionRulesTest(TestCase):
