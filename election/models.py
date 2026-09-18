@@ -350,6 +350,17 @@ class Candidate(models.Model):
         super().clean()
         if (
             self.election_id
+            and self.status == self.Status.ACCEPTED
+            and self.election.office == Election.Office.PRESIDENT
+        ):
+            raise ValidationError({
+                "status": (
+                    "立候補承諾を選択できるのは"
+                    "代議員選挙（一般枠・企業枠）のみです。"
+                ),
+            })
+        if (
+            self.election_id
             and self.member_id
             and self.election.office == Election.Office.REPRESENTATIVE
             and self.election.representative_category

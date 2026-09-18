@@ -28,7 +28,11 @@ from .models import (
 from .services.counting import preview_election_count
 from .services.cycle_setup import setup_cycle
 from .services.paper_voting import accept_paper_votes, create_paper_ballot
-from .views import should_show_candidate_route_labels, validate_vote
+from .views import (
+    get_valid_candidate_statuses,
+    should_show_candidate_route_labels,
+    validate_vote,
+)
 
 
 CSV_HEADER = (
@@ -124,6 +128,41 @@ class CandidateAdminTest(SimpleTestCase):
 
         self.assertFalse(
             self.model_admin.is_manifesto_applicable(None)
+        )
+
+    def test_president_candidate_cannot_be_nomination_accepted(self):
+        candidate = Candidate(
+            election=Election(
+                pk=1,
+                office=Election.Office.PRESIDENT,
+                phase=Election.Phase.FINAL,
+            ),
+            status=Candidate.Status.ACCEPTED,
+        )
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "立候補承諾を選択できるのは代議員選挙",
+        ):
+            candidate.clean()
+
+    def test_accepted_status_is_valid_only_for_representative_final(self):
+        president = Election(
+            office=Election.Office.PRESIDENT,
+            phase=Election.Phase.FINAL,
+        )
+        representative = Election(
+            office=Election.Office.REPRESENTATIVE,
+            phase=Election.Phase.FINAL,
+        )
+
+        self.assertNotIn(
+            Candidate.Status.ACCEPTED,
+            get_valid_candidate_statuses(president),
+        )
+        self.assertIn(
+            Candidate.Status.ACCEPTED,
+            get_valid_candidate_statuses(representative),
         )
 
 
@@ -808,9 +847,15 @@ class CountPreviewTest(TestCase):
         self.assertContains(result_response, "抽選は実行済みです")
 
     def test_candidate_route_labels_appear_only_when_accepted_exists(self):
+        self.election.office = Election.Office.REPRESENTATIVE
+        self.election.representative_category = (
+            Election.RepresentativeCategory.GENERAL
+        )
+        self.election.save(
+            update_fields=["office", "representative_category"]
+        )
         self.high_vote.status = Candidate.Status.ACCEPTED
-        self.high_vote.manifesto = "学会の発展に尽力します。\n若手を支援します。"
-        self.high_vote.save(update_fields=["status", "manifesto"])
+        self.high_vote.save(update_fields=["status"])
         candidates = list(
             Candidate.objects.filter(election=self.election)
             .select_related("member")
@@ -836,8 +881,6 @@ class CountPreviewTest(TestCase):
                 if template_name == "election/ballot.html":
                     self.assertIn("(立)：立候補", rendered)
                     self.assertIn("(推)：予備選挙による推薦", rendered)
-                    self.assertIn("学会の発展に尽力します。", rendered)
-                    self.assertIn("<br>", rendered)
 
         self.high_vote.status = Candidate.Status.QUALIFIED
         self.high_vote.save(update_fields=["status"])
@@ -854,6 +897,23 @@ class CountPreviewTest(TestCase):
         self.assertNotIn("(推)", rendered)
         self.assertNotIn("(立)", rendered)
         self.assertNotIn("候補者区分の説明", rendered)
+
+    def test_president_manifesto_is_displayed_on_ballot(self):
+        self.high_vote.manifesto = (
+            "学会の発展に尽力します。\n若手を支援します。"
+        )
+        self.high_vote.save(update_fields=["manifesto"])
+
+        rendered = render_to_string("election/ballot.html", {
+            "election": self.election,
+            "candidates": [self.high_vote],
+            "vote_limit": self.election.vote_limit,
+            "selected_candidate_ids": [],
+            "show_candidate_route_labels": False,
+        })
+
+        self.assertIn("学会の発展に尽力します。", rendered)
+        self.assertIn("<br>", rendered)
 
 
 class RepresentativeElectionRulesTest(TestCase):

@@ -39,10 +39,10 @@ def get_valid_candidate_statuses(election):
     """
 
     if election.phase == Election.Phase.FINAL:
-        return [
-            Candidate.Status.QUALIFIED,
-            Candidate.Status.ACCEPTED,
-        ]
+        statuses = [Candidate.Status.QUALIFIED]
+        if election.office == Election.Office.REPRESENTATIVE:
+            statuses.append(Candidate.Status.ACCEPTED)
+        return statuses
 
     return [
         Candidate.Status.ELIGIBLE,
@@ -52,6 +52,7 @@ def get_valid_candidate_statuses(election):
 def should_show_candidate_route_labels(election):
     return (
         election.phase == Election.Phase.FINAL
+        and election.office == Election.Office.REPRESENTATIVE
         and Candidate.objects.filter(
             election=election,
             status=Candidate.Status.ACCEPTED,
