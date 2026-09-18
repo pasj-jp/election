@@ -34,6 +34,7 @@ h2 { margin: 0 0 8px; color: #183f52; font-size: 1.35rem; }
 .candidate input { width: 20px; height: 20px; margin: 2px 0 0; flex: 0 0 auto; accent-color: #167596; }
 .candidate-name { display: block; color: #183f52; font-size: 1.08rem; font-weight: 700; }
 .affiliation { display: block; margin-top: 6px; color: #687b86; font-size: .9rem; line-height: 1.45; }
+.candidate-manifesto { display: block; margin-top: 10px; color: #405b69; font-size: .94rem; font-weight: 400; line-height: 1.7; }
 .empty { grid-column: 1 / -1; padding: 30px; text-align: center; background: #fff; border-radius: 10px; }
 
 .confirm-panel { overflow: hidden; background: #fff; border: 1px solid #d7e3e9; border-radius: 14px; box-shadow: 0 12px 32px rgba(26, 67, 87, .1); }

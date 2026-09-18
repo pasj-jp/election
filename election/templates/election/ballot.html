@@ -53,6 +53,9 @@
                         {% if candidate.member.affiliation %}
                             <span class="affiliation">{{ candidate.member.affiliation }}</span>
                         {% endif %}
+                        {% if election.office == "president" and election.phase == "final" and candidate.manifesto %}
+                            <span class="candidate-manifesto">{{ candidate.manifesto|linebreaksbr }}</span>
+                        {% endif %}
                     </span>
                 </label>
             {% empty %}

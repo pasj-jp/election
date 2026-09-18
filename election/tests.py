@@ -96,6 +96,12 @@ class CandidateAdminTest(SimpleTestCase):
             3,
         )
 
+    def test_manifesto_is_editable(self):
+        field = Candidate._meta.get_field("manifesto")
+
+        self.assertTrue(field.editable)
+        self.assertEqual(field.verbose_name, "抱負")
+
 
 class AdminModelOrderTest(SimpleTestCase):
 
@@ -472,7 +478,8 @@ class CountPreviewTest(TestCase):
 
     def test_candidate_route_labels_appear_only_when_accepted_exists(self):
         self.high_vote.status = Candidate.Status.ACCEPTED
-        self.high_vote.save(update_fields=["status"])
+        self.high_vote.manifesto = "学会の発展に尽力します。\n若手を支援します。"
+        self.high_vote.save(update_fields=["status", "manifesto"])
         candidates = list(
             Candidate.objects.filter(election=self.election)
             .select_related("member")
@@ -498,6 +505,8 @@ class CountPreviewTest(TestCase):
                 if template_name == "election/ballot.html":
                     self.assertIn("(立)：立候補", rendered)
                     self.assertIn("(推)：予備選挙による推薦", rendered)
+                    self.assertIn("学会の発展に尽力します。", rendered)
+                    self.assertIn("<br>", rendered)
 
         self.high_vote.status = Candidate.Status.QUALIFIED
         self.high_vote.save(update_fields=["status"])
