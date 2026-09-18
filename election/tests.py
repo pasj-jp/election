@@ -24,6 +24,7 @@ from .models import (
     VoterParticipation,
 )
 from .services.counting import preview_election_count
+from .services.paper_voting import accept_paper_votes, create_paper_ballot
 from .views import should_show_candidate_route_labels, validate_vote
 
 
@@ -121,6 +122,137 @@ class CandidateAdminTest(SimpleTestCase):
         self.assertFalse(
             self.model_admin.is_manifesto_applicable(None)
         )
+
+
+class PaperVotingTest(TestCase):
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="paper-admin",
+            email="paper@example.com",
+            password="password",
+        )
+        self.client.force_login(self.user)
+        self.cycle = ElectionCycle.objects.create(
+            year=2035,
+            name="2035年度選挙",
+        )
+        self.member = MemberSnapshot.objects.create(
+            cycle=self.cycle,
+            member_no="p001",
+            last_name="書面",
+            first_name="太郎",
+            email="paper-voter@example.com",
+            employee_type="正会員",
+            representative_category=(
+                MemberSnapshot.RepresentativeCategory.GENERAL
+            ),
+            is_eligible_voter=True,
+        )
+        now = timezone.now()
+        self.election = Election.objects.create(
+            cycle=self.cycle,
+            office=Election.Office.PRESIDENT,
+            phase=Election.Phase.FINAL,
+            status=Election.Status.CLOSED,
+            start_at=now - timedelta(days=2),
+            end_at=now - timedelta(days=1),
+        )
+        self.candidate = Candidate.objects.create(
+            election=self.election,
+            member=self.member,
+            status=Candidate.Status.QUALIFIED,
+        )
+        self.voter = VoterParticipation.objects.get(
+            election=self.election,
+            member=self.member,
+        )
+
+    def test_paper_reception_blocks_electronic_vote(self):
+        result = accept_paper_votes([self.voter.pk])
+
+        self.voter.refresh_from_db()
+        self.assertEqual(result["accepted"], 1)
+        self.assertIsNotNone(self.voter.voted_at)
+        self.assertEqual(
+            self.voter.voting_method,
+            VoterParticipation.VotingMethod.PAPER,
+        )
+
+        second_result = accept_paper_votes([self.voter.pk])
+        self.assertEqual(second_result["accepted"], 0)
+        self.assertEqual(second_result["already_voted"], 1)
+
+    def test_admin_can_accept_selected_voter_as_paper_vote(self):
+        response = self.client.post(
+            reverse("admin:election_voterparticipation_changelist"),
+            {
+                "action": "accept_as_paper_vote",
+                "_selected_action": [self.voter.pk],
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "1名を書面投票受付済みにしました。",
+        )
+        self.voter.refresh_from_db()
+        self.assertEqual(
+            self.voter.voting_method,
+            VoterParticipation.VotingMethod.PAPER,
+        )
+
+    def test_paper_ballot_is_anonymous_and_marked_as_paper(self):
+        ballot = create_paper_ballot(
+            self.election,
+            [self.candidate],
+        )
+
+        self.assertEqual(
+            ballot.voting_method,
+            Ballot.VotingMethod.PAPER,
+        )
+        self.assertEqual(
+            ballot.choices.get().candidate,
+            self.candidate,
+        )
+        self.assertFalse(hasattr(ballot, "voter_participation"))
+
+    def test_admin_can_enter_one_paper_ballot(self):
+        url = reverse(
+            "admin:election_election_paper_ballot",
+            args=[self.election.pk],
+        )
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "書面票入力")
+
+        response = self.client.post(
+            url,
+            {"candidates": [self.candidate.pk]},
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "書面票を匿名票として1票登録しました。",
+        )
+        self.assertEqual(
+            Ballot.objects.filter(
+                election=self.election,
+                voting_method=Ballot.VotingMethod.PAPER,
+            ).count(),
+            1,
+        )
+
+    def test_counted_election_rejects_paper_ballots(self):
+        self.election.status = Election.Status.COUNTED
+        self.election.save(update_fields=["status"])
+
+        with self.assertRaises(ValidationError):
+            create_paper_ballot(self.election, [self.candidate])
 
 
 class AdminModelOrderTest(SimpleTestCase):

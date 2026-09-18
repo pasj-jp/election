@@ -9,7 +9,7 @@ from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
 
-from .forms import ElectionAdminForm, MemberCsvImportForm
+from .forms import ElectionAdminForm, MemberCsvImportForm, PaperBallotForm
 from .models import (
     Ballot,
     Candidate,
@@ -31,6 +31,7 @@ from .services.lottery import (
     preview_lottery,
 )
 from .services.member_import import MemberImportError, import_members
+from .services.paper_voting import accept_paper_votes, create_paper_ballot
 
 
 admin.site.site_header = "加速器学会選挙システム"
@@ -214,9 +215,78 @@ class ElectionAdmin(admin.ModelAdmin):
                 ),
                 name="election_election_email_send",
             ),
+            path(
+                "<path:object_id>/paper-ballot/",
+                self.admin_site.admin_view(
+                    self.paper_ballot_view
+                ),
+                name="election_election_paper_ballot",
+            ),
         ]
 
         return custom_urls + urls
+
+    def paper_ballot_view(self, request, object_id):
+        election = get_object_or_404(
+            Election.objects.select_related("cycle"),
+            pk=object_id,
+        )
+        if not self.has_change_permission(request, election):
+            raise PermissionDenied
+
+        change_url = reverse(
+            "admin:election_election_change",
+            args=[election.pk],
+        )
+        if election.status == Election.Status.COUNTED:
+            self.message_user(
+                request,
+                "開票済みの選挙には書面票を登録できません。",
+                messages.ERROR,
+            )
+            return redirect(change_url)
+
+        form = PaperBallotForm(
+            request.POST or None,
+            election=election,
+        )
+        if request.method == "POST" and form.is_valid():
+            try:
+                create_paper_ballot(
+                    election,
+                    form.cleaned_data["candidates"],
+                )
+            except ValidationError as exc:
+                form.add_error(None, exc)
+            else:
+                self.message_user(
+                    request,
+                    "書面票を匿名票として1票登録しました。",
+                    messages.SUCCESS,
+                )
+                return redirect(
+                    "admin:election_election_paper_ballot",
+                    object_id=election.pk,
+                )
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "書面票入力",
+            "election": election,
+            "form": form,
+            "opts": self.model._meta,
+            "paper_ballot_count": election.ballots.filter(
+                voting_method=Ballot.VotingMethod.PAPER,
+            ).count(),
+            "paper_voter_count": election.voter_participations.filter(
+                voting_method=VoterParticipation.VotingMethod.PAPER,
+            ).count(),
+        }
+        return render(
+            request,
+            "admin/election/election/paper_ballot.html",
+            context,
+        )
 
     def get_email_election(self, request, object_id):
         election = get_object_or_404(
@@ -911,12 +981,15 @@ class CandidateAdmin(admin.ModelAdmin):
 @admin.register(VoterParticipation)
 class VoterParticipationAdmin(admin.ModelAdmin):
 
+    actions = ("accept_as_paper_vote",)
+
     list_display = (
         "member",
         "election",
         "token_status",
         "email_status",
         "vote_status",
+        "voting_method_display",
         "email_send_attempts",
     )
 
@@ -926,6 +999,7 @@ class VoterParticipationAdmin(admin.ModelAdmin):
         "election__phase",
         "email_sent_at",
         "voted_at",
+        "voting_method",
     )
 
     search_fields = (
@@ -941,8 +1015,33 @@ class VoterParticipationAdmin(admin.ModelAdmin):
         "email_sent_at",
         "email_send_attempts",
         "voted_at",
+        "voting_method",
         "created_at",
     )
+
+    @admin.action(description="選択した有権者を書面投票受付済みにする")
+    def accept_as_paper_vote(self, request, queryset):
+        result = accept_paper_votes(
+            queryset.values_list("pk", flat=True)
+        )
+        if result["accepted"]:
+            self.message_user(
+                request,
+                f'{result["accepted"]}名を書面投票受付済みにしました。',
+                messages.SUCCESS,
+            )
+        if result["already_voted"]:
+            self.message_user(
+                request,
+                f'{result["already_voted"]}名は投票済みのため変更していません。',
+                messages.WARNING,
+            )
+        if result["counted"]:
+            self.message_user(
+                request,
+                f'{result["counted"]}名は開票済みの選挙のため変更していません。',
+                messages.WARNING,
+            )
 
     @admin.display(
         description="Token",
@@ -970,6 +1069,10 @@ class VoterParticipationAdmin(admin.ModelAdmin):
             obj.voted_at
             is not None
         )
+
+    @admin.display(description="投票方法")
+    def voting_method_display(self, obj):
+        return obj.get_voting_method_display() or "—"
 
 
 class LotteryCandidateInline(admin.TabularInline):

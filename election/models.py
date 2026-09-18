@@ -325,6 +325,10 @@ class VoterParticipation(models.Model):
     投票内容（Ballot）とは意図的に関連付けない。
     """
 
+    class VotingMethod(models.TextChoices):
+        ELECTRONIC = "electronic", "電子投票"
+        PAPER = "paper", "書面投票"
+
     election = models.ForeignKey(
         Election,
         on_delete=models.PROTECT,
@@ -348,6 +352,14 @@ class VoterParticipation(models.Model):
     voted_at = models.DateTimeField(
         null=True,
         blank=True,
+    )
+
+    voting_method = models.CharField(
+        max_length=20,
+        choices=VotingMethod.choices,
+        blank=True,
+        default="",
+        verbose_name="投票方法",
     )
 
     created_at = models.DateTimeField(
@@ -399,6 +411,10 @@ class Ballot(models.Model):
     「誰が投票したか」と「誰に投票したか」を分離する。
     """
 
+    class VotingMethod(models.TextChoices):
+        ELECTRONIC = "electronic", "電子投票"
+        PAPER = "paper", "書面投票"
+
     ballot_uuid = models.UUIDField(
         default=uuid.uuid4,
         unique=True,
@@ -409,6 +425,13 @@ class Ballot(models.Model):
         Election,
         on_delete=models.PROTECT,
         related_name="ballots",
+    )
+
+    voting_method = models.CharField(
+        max_length=20,
+        choices=VotingMethod.choices,
+        default=VotingMethod.ELECTRONIC,
+        verbose_name="投票方法",
     )
 
     submitted_at = models.DateTimeField(

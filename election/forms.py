@@ -1,7 +1,8 @@
 from django import forms
 from django.db import models
 
-from .models import Election, ElectionCycle
+from .models import Candidate, Election, ElectionCycle
+from .views import get_valid_candidate_statuses, validate_vote
 
 
 class ElectionAdminForm(forms.ModelForm):
@@ -86,3 +87,37 @@ class MemberCsvImportForm(forms.Form):
         if not uploaded_file.name.lower().endswith(".csv"):
             raise forms.ValidationError("CSVファイルを選択してください。")
         return uploaded_file
+
+
+class PaperBallotForm(forms.Form):
+    candidates = forms.ModelMultipleChoiceField(
+        label="投票先",
+        queryset=Candidate.objects.none(),
+        widget=forms.CheckboxSelectMultiple,
+    )
+
+    def __init__(self, *args, election, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.election = election
+        self.fields["candidates"].queryset = (
+            Candidate.objects
+            .filter(
+                election=election,
+                status__in=get_valid_candidate_statuses(election),
+            )
+            .select_related("member")
+            .order_by("member__member_no")
+        )
+        self.fields["candidates"].help_text = (
+            f"1枚の書面票について、最大{election.vote_limit}名まで選択できます。"
+        )
+
+    def clean_candidates(self):
+        candidates = self.cleaned_data["candidates"]
+        error = validate_vote(
+            self.election,
+            [candidate.pk for candidate in candidates],
+        )
+        if error:
+            raise forms.ValidationError(error)
+        return candidates

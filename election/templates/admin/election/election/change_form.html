@@ -34,6 +34,18 @@
 
         {% endif %}
 
+        {% if original.status != "counted" %}
+
+            <li>
+                <a
+                    href="{% url 'admin:election_election_paper_ballot' original.pk %}"
+                >
+                    書面票入力
+                </a>
+            </li>
+
+        {% endif %}
+
     {% endif %}
 
 {% endblock %}

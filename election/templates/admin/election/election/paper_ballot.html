@@ -1,0 +1,43 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+
+<h1>{{ election }} - 書面票入力</h1>
+
+<div class="module">
+    <h2>登録状況</h2>
+    <div style="padding: 16px;">
+        <p>書面投票受付済み: <strong>{{ paper_voter_count }}</strong>名</p>
+        <p>匿名の書面票登録済み: <strong>{{ paper_ballot_count }}</strong>票</p>
+        {% if paper_voter_count != paper_ballot_count %}
+            <p class="errornote">
+                受付人数と書面票数が一致していません。すべての書面票を登録後に確認してください。
+            </p>
+        {% endif %}
+    </div>
+</div>
+
+<form method="post" novalidate>
+    {% csrf_token %}
+    <fieldset class="module aligned">
+        <h2>投票用紙1枚分の入力</h2>
+        {{ form.non_field_errors }}
+        <div class="form-row">
+            {{ form.candidates.errors }}
+            {{ form.candidates.label_tag }}
+            <div>
+                {{ form.candidates }}
+                {% if form.candidates.help_text %}
+                    <div class="help">{{ form.candidates.help_text }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </fieldset>
+
+    <div class="submit-row">
+        <a href="{% url 'admin:election_election_change' election.pk %}" class="button">キャンセル</a>
+        <input type="submit" value="この書面票を登録" class="default">
+    </div>
+</form>
+
+{% endblock %}

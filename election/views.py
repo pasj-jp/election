@@ -649,7 +649,8 @@ def ballot_submit(request):
             # 匿名Ballotを作成
             #
             ballot = Ballot.objects.create(
-                election=election
+                election=election,
+                voting_method=Ballot.VotingMethod.ELECTRONIC,
             )
 
             #
@@ -671,9 +672,14 @@ def ballot_submit(request):
             #
             voter.voted_at = timezone.now()
 
+            voter.voting_method = (
+                VoterParticipation.VotingMethod.ELECTRONIC
+            )
+
             voter.save(
                 update_fields=[
                     "voted_at",
+                    "voting_method",
                 ]
             )
 
