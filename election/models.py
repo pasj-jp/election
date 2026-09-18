@@ -124,6 +124,17 @@ class Election(models.Model):
         )
 
     @property
+    def election_type_display(self):
+        if self.office == self.Office.PRESIDENT:
+            return self.get_office_display()
+        if self.representative_category:
+            return (
+                f"{self.get_office_display()}"
+                f"（{self.get_representative_category_display()}）"
+            )
+        return self.get_office_display()
+
+    @property
     def vote_limit(self):
         if self.office == self.Office.PRESIDENT:
             return 1

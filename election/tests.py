@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 
@@ -596,6 +597,28 @@ class RepresentativeElectionRulesTest(TestCase):
         self.assertEqual(preview["threshold"], 3)
         self.assertEqual(preview["qualified"], [candidate])
         self.assertEqual(preview["final"], final)
+
+    def test_voter_screens_display_representative_category(self):
+        election = self.create_election(
+            Election.Phase.PRELIMINARY,
+            Election.RepresentativeCategory.CORPORATE,
+        )
+
+        self.assertEqual(
+            election.election_type_display,
+            "代議員（企業枠）",
+        )
+        for template_name in (
+            "election/already_voted.html",
+            "election/election_closed.html",
+            "election/vote_completed.html",
+        ):
+            with self.subTest(template_name=template_name):
+                rendered = render_to_string(template_name, {
+                    "election": election,
+                    "submitted_at": self.now,
+                })
+                self.assertIn("代議員（企業枠）・予備選挙", rendered)
 
 
 class ElectionAdminFormTest(TestCase):

@@ -10,7 +10,7 @@
         <p class="eyebrow">VOTE COMPLETED</p>
         <h1>投票を受け付けました</h1>
         <p class="election-name">{{ election.cycle.name }}</p>
-        <p class="status-election-type">{{ election.get_office_display }}・{{ election.get_phase_display }}</p>
+        <p class="status-election-type">{{ election.election_type_display }}・{{ election.get_phase_display }}</p>
         <div class="receipt">
             <span class="receipt-label">受付日時</span>
             <time class="receipt-time" datetime="{{ submitted_at|date:'c' }}">

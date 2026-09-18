@@ -660,12 +660,7 @@ class ElectionAdmin(admin.ModelAdmin):
         ordering="office",
     )
     def office_display(self, obj):
-        if obj.office == Election.Office.PRESIDENT:
-            return obj.get_office_display()
-        return (
-            f"{obj.get_office_display()}"
-            f"（{obj.get_representative_category_display()}）"
-        )
+        return obj.election_type_display
 
     @admin.display(
         description="区分",
