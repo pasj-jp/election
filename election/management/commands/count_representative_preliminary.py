@@ -32,10 +32,16 @@ class Command(BaseCommand):
             action="store_true",
             help="DBを変更せず集計結果のみ表示します",
         )
+        parser.add_argument(
+            "--category",
+            choices=["general", "corporate"],
+            required=True,
+        )
 
     def handle(self, *args, **options):
         year = options["cycle"]
         dry_run = options["dry_run"]
+        category = options["category"]
 
         try:
             cycle = ElectionCycle.objects.get(year=year)
@@ -52,6 +58,7 @@ class Command(BaseCommand):
                 cycle=cycle,
                 office=Election.Office.REPRESENTATIVE,
                 phase=Election.Phase.PRELIMINARY,
+                representative_category=category,
             )
         except Election.DoesNotExist:
             raise CommandError(
@@ -66,6 +73,7 @@ class Command(BaseCommand):
                 cycle=cycle,
                 office=Election.Office.REPRESENTATIVE,
                 phase=Election.Phase.FINAL,
+                representative_category=category,
             )
         except Election.DoesNotExist:
             raise CommandError(

@@ -10,7 +10,7 @@
         <p class="eyebrow">ALREADY VOTED</p>
         <h1>すでに投票が完了しています</h1>
         <p class="election-name">{{ election.cycle.name }}</p>
-        <p class="status-election-type">{{ election.get_office_display }}・{{ election.get_phase_display }}</p>
+        <p class="status-election-type">{{ election.election_type_display }}・{{ election.get_phase_display }}</p>
     </div>
     <div class="status-note">
         <p>この投票URLでの投票は、すでに受け付けられています。</p>

@@ -1,0 +1,12 @@
+{% extends "admin/change_form.html" %}
+
+{% block object-tools-items %}
+    {{ block.super }}
+    {% if original %}
+        <li>
+            <a href="{% url 'admin:election_electioncycle_import_members' original.pk %}">
+                会員リスト取り込み
+            </a>
+        </li>
+    {% endif %}
+{% endblock %}

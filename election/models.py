@@ -1,5 +1,6 @@
 import uuid
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
@@ -12,6 +13,27 @@ class ElectionCycle(models.Model):
     year = models.PositiveIntegerField(unique=True)
     name = models.CharField(max_length=200)
 
+    preliminary_start_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="予備選挙開始日時",
+    )
+    preliminary_end_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="予備選挙終了日時",
+    )
+    final_start_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="本選挙開始日時",
+    )
+    final_end_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="本選挙終了日時",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -21,6 +43,27 @@ class ElectionCycle(models.Model):
 
     def __str__(self):
         return self.name
+
+    def clean(self):
+        super().clean()
+        period_pairs = (
+            (
+                "preliminary_start_at",
+                "preliminary_end_at",
+                "予備選挙",
+            ),
+            ("final_start_at", "final_end_at", "本選挙"),
+        )
+        errors = {}
+        for start_field, end_field, label in period_pairs:
+            start_at = getattr(self, start_field)
+            end_at = getattr(self, end_field)
+            if start_at and end_at and start_at >= end_at:
+                errors[end_field] = (
+                    f"{label}の終了日時は開始日時より後にしてください。"
+                )
+        if errors:
+            raise ValidationError(errors)
 
 
 class Election(models.Model):
@@ -42,6 +85,10 @@ class Election(models.Model):
         CLOSED = "closed", "投票終了"
         COUNTED = "counted", "開票済"
 
+    class RepresentativeCategory(models.TextChoices):
+        GENERAL = "general", "一般枠"
+        CORPORATE = "corporate", "企業枠"
+
     cycle = models.ForeignKey(
         ElectionCycle,
         on_delete=models.PROTECT,
@@ -51,6 +98,14 @@ class Election(models.Model):
     office = models.CharField(
         max_length=20,
         choices=Office.choices,
+    )
+
+    representative_category = models.CharField(
+        max_length=20,
+        choices=RepresentativeCategory.choices,
+        blank=True,
+        default="",
+        verbose_name="代議員枠",
     )
 
     phase = models.CharField(
@@ -74,18 +129,64 @@ class Election(models.Model):
         verbose_name_plural = "選挙"
         constraints = [
             models.UniqueConstraint(
-                fields=["cycle", "office", "phase"],
-                name="unique_election_per_cycle_office_phase",
+                fields=[
+                    "cycle",
+                    "office",
+                    "phase",
+                    "representative_category",
+                ],
+                name="unique_election_per_cycle_office_phase_category",
             ),
         ]
-        ordering = ["cycle", "phase", "office"]
+        ordering = ["cycle", "phase", "office", "representative_category"]
+
+    def clean(self):
+        super().clean()
+        if self.office == self.Office.REPRESENTATIVE:
+            if not self.representative_category:
+                raise ValidationError({
+                    "representative_category": "代議員選挙では枠を選択してください。"
+                })
+        elif self.representative_category:
+            raise ValidationError({
+                "representative_category": "会長選挙では代議員枠を選択できません。"
+            })
 
     def __str__(self):
+        category = (
+            f"（{self.get_representative_category_display()}） "
+            if self.representative_category
+            else ""
+        )
         return (
             f"{self.cycle.year}年度 "
             f"{self.get_office_display()} "
+            f"{category}"
             f"{self.get_phase_display()}"
         )
+
+    @property
+    def election_type_display(self):
+        if self.office == self.Office.PRESIDENT:
+            return self.get_office_display()
+        if self.representative_category:
+            return (
+                f"{self.get_office_display()}"
+                f"（{self.get_representative_category_display()}）"
+            )
+        return self.get_office_display()
+
+    @property
+    def vote_limit(self):
+        if self.office == self.Office.PRESIDENT:
+            return 1
+        limits = {
+            (self.Phase.PRELIMINARY, self.RepresentativeCategory.GENERAL): 10,
+            (self.Phase.PRELIMINARY, self.RepresentativeCategory.CORPORATE): 2,
+            (self.Phase.FINAL, self.RepresentativeCategory.GENERAL): 25,
+            (self.Phase.FINAL, self.RepresentativeCategory.CORPORATE): 5,
+        }
+        return limits.get((self.phase, self.representative_category), 0)
 
     @property
     def is_voting_open(self):
@@ -214,6 +315,11 @@ class Candidate(models.Model):
         default=Status.ELIGIBLE,
     )
 
+    manifesto = models.TextField(
+        blank=True,
+        verbose_name="抱負",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -232,6 +338,27 @@ class Candidate(models.Model):
             f"{self.member.last_name} {self.member.first_name}"
         )
 
+    @property
+    def route_label(self):
+        labels = {
+            self.Status.QUALIFIED: "(推)",
+            self.Status.ACCEPTED: "(立)",
+        }
+        return labels.get(self.status, "")
+
+    def clean(self):
+        super().clean()
+        if (
+            self.election_id
+            and self.member_id
+            and self.election.office == Election.Office.REPRESENTATIVE
+            and self.election.representative_category
+            != self.member.representative_category
+        ):
+            raise ValidationError({
+                "member": "選挙の代議員枠と会員の所属枠が一致していません。"
+            })
+
 class VoterParticipation(models.Model):
     """
     ある選挙について、ある会員が投票資格を持ち、
@@ -239,6 +366,10 @@ class VoterParticipation(models.Model):
 
     投票内容（Ballot）とは意図的に関連付けない。
     """
+
+    class VotingMethod(models.TextChoices):
+        ELECTRONIC = "electronic", "電子投票"
+        PAPER = "paper", "書面投票"
 
     election = models.ForeignKey(
         Election,
@@ -263,6 +394,14 @@ class VoterParticipation(models.Model):
     voted_at = models.DateTimeField(
         null=True,
         blank=True,
+    )
+
+    voting_method = models.CharField(
+        max_length=20,
+        choices=VotingMethod.choices,
+        blank=True,
+        default="",
+        verbose_name="投票方法",
     )
 
     created_at = models.DateTimeField(
@@ -314,6 +453,10 @@ class Ballot(models.Model):
     「誰が投票したか」と「誰に投票したか」を分離する。
     """
 
+    class VotingMethod(models.TextChoices):
+        ELECTRONIC = "electronic", "電子投票"
+        PAPER = "paper", "書面投票"
+
     ballot_uuid = models.UUIDField(
         default=uuid.uuid4,
         unique=True,
@@ -324,6 +467,13 @@ class Ballot(models.Model):
         Election,
         on_delete=models.PROTECT,
         related_name="ballots",
+    )
+
+    voting_method = models.CharField(
+        max_length=20,
+        choices=VotingMethod.choices,
+        default=VotingMethod.ELECTRONIC,
+        verbose_name="投票方法",
     )
 
     submitted_at = models.DateTimeField(

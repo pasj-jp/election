@@ -49,6 +49,16 @@ def get_valid_candidate_statuses(election):
     ]
 
 
+def should_show_candidate_route_labels(election):
+    return (
+        election.phase == Election.Phase.FINAL
+        and Candidate.objects.filter(
+            election=election,
+            status=Candidate.Status.ACCEPTED,
+        ).exists()
+    )
+
+
 def deterministic_shuffle(candidates, election, voter):
     """
     有権者ごとに異なる候補者順を生成する。
@@ -131,13 +141,11 @@ def validate_vote(election, candidate_ids):
     # 代議員
     #
     if election.office == Election.Office.REPRESENTATIVE:
-
         if len(candidate_ids) == 0:
             return "少なくとも1名を選択してください。"
-
-        if len(candidate_ids) > 10:
+        if len(candidate_ids) > election.vote_limit:
             return (
-                "代議員は最大10名まで"
+                f"代議員は最大{election.vote_limit}名まで"
                 "選択できます。"
             )
 
@@ -334,6 +342,10 @@ def ballot(request):
         {
             "election": election,
             "candidates": candidates,
+            "vote_limit": election.vote_limit,
+            "show_candidate_route_labels": (
+                should_show_candidate_route_labels(election)
+            ),
             "selected_candidate_ids":
                 selected_candidate_ids,
         },
@@ -490,6 +502,9 @@ def ballot_confirm(request):
         {
             "election": election,
             "candidates": candidates,
+            "show_candidate_route_labels": (
+                should_show_candidate_route_labels(election)
+            ),
         },
     )
 
@@ -634,7 +649,8 @@ def ballot_submit(request):
             # 匿名Ballotを作成
             #
             ballot = Ballot.objects.create(
-                election=election
+                election=election,
+                voting_method=Ballot.VotingMethod.ELECTRONIC,
             )
 
             #
@@ -656,9 +672,14 @@ def ballot_submit(request):
             #
             voter.voted_at = timezone.now()
 
+            voter.voting_method = (
+                VoterParticipation.VotingMethod.ELECTRONIC
+            )
+
             voter.save(
                 update_fields=[
                     "voted_at",
+                    "voting_method",
                 ]
             )
 

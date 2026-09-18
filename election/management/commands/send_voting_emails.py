@@ -9,6 +9,10 @@ from django.db.models import F
 from django.template.loader import render_to_string
 from django.utils import timezone
 
+from election.management.command_utils import (
+    add_category_argument,
+    get_selected_election,
+)
 from election.models import (
     Election,
     ElectionCycle,
@@ -53,6 +57,8 @@ class Command(BaseCommand):
             required=True,
         )
 
+        add_category_argument(parser)
+
         parser.add_argument(
             "--base-url",
             required=True,
@@ -96,8 +102,6 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
 
         year = options["cycle"]
-        office = options["office"]
-        phase = options["phase"]
         base_url = options["base_url"]
         dry_run = options["dry_run"]
         limit = options["limit"]
@@ -124,16 +128,7 @@ class Command(BaseCommand):
                 f"{year}年度のElectionCycleが存在しません。"
             )
 
-        try:
-            election = Election.objects.get(
-                cycle=cycle,
-                office=office,
-                phase=phase,
-            )
-        except Election.DoesNotExist:
-            raise CommandError(
-                "指定されたElectionが存在しません。"
-            )
+        election = get_selected_election(cycle, options)
 
         #
         # メール送信はOPEN前でも可能とするが、

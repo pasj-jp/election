@@ -1,13 +1,20 @@
+import csv
 from datetime import timedelta
+from io import StringIO
 
 from django.contrib import admin
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
+from django.core.management.base import CommandError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 
 from .admin import CandidateAdmin, order_admin_models
+from .forms import ElectionAdminForm
+from .management.command_utils import get_selected_election
 from .models import (
     Ballot,
     BallotChoice,
@@ -19,6 +26,9 @@ from .models import (
     VoterParticipation,
 )
 from .services.counting import preview_election_count
+from .services.cycle_setup import setup_cycle
+from .services.paper_voting import accept_paper_votes, create_paper_ballot
+from .views import should_show_candidate_route_labels, validate_vote
 
 
 CSV_HEADER = (
@@ -89,6 +99,163 @@ class CandidateAdminTest(SimpleTestCase):
             self.model_admin.vote_count_display(candidate),
             3,
         )
+
+    def test_manifesto_is_editable(self):
+        field = Candidate._meta.get_field("manifesto")
+
+        self.assertTrue(field.editable)
+        self.assertEqual(field.verbose_name, "抱負")
+
+    def test_manifesto_is_applicable_only_to_president_final(self):
+        cases = [
+            (Election.Office.PRESIDENT, Election.Phase.FINAL, True),
+            (Election.Office.PRESIDENT, Election.Phase.PRELIMINARY, False),
+            (Election.Office.REPRESENTATIVE, Election.Phase.FINAL, False),
+        ]
+        for office, phase, expected in cases:
+            with self.subTest(office=office, phase=phase):
+                candidate = Candidate(
+                    election=Election(office=office, phase=phase),
+                )
+                self.assertEqual(
+                    self.model_admin.is_manifesto_applicable(candidate),
+                    expected,
+                )
+
+        self.assertFalse(
+            self.model_admin.is_manifesto_applicable(None)
+        )
+
+
+class PaperVotingTest(TestCase):
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="paper-admin",
+            email="paper@example.com",
+            password="password",
+        )
+        self.client.force_login(self.user)
+        self.cycle = ElectionCycle.objects.create(
+            year=2035,
+            name="2035年度選挙",
+        )
+        self.member = MemberSnapshot.objects.create(
+            cycle=self.cycle,
+            member_no="p001",
+            last_name="書面",
+            first_name="太郎",
+            email="paper-voter@example.com",
+            employee_type="正会員",
+            representative_category=(
+                MemberSnapshot.RepresentativeCategory.GENERAL
+            ),
+            is_eligible_voter=True,
+        )
+        now = timezone.now()
+        self.election = Election.objects.create(
+            cycle=self.cycle,
+            office=Election.Office.PRESIDENT,
+            phase=Election.Phase.FINAL,
+            status=Election.Status.CLOSED,
+            start_at=now - timedelta(days=2),
+            end_at=now - timedelta(days=1),
+        )
+        self.candidate = Candidate.objects.create(
+            election=self.election,
+            member=self.member,
+            status=Candidate.Status.QUALIFIED,
+        )
+        self.voter = VoterParticipation.objects.get(
+            election=self.election,
+            member=self.member,
+        )
+
+    def test_paper_reception_blocks_electronic_vote(self):
+        result = accept_paper_votes([self.voter.pk])
+
+        self.voter.refresh_from_db()
+        self.assertEqual(result["accepted"], 1)
+        self.assertIsNotNone(self.voter.voted_at)
+        self.assertEqual(
+            self.voter.voting_method,
+            VoterParticipation.VotingMethod.PAPER,
+        )
+
+        second_result = accept_paper_votes([self.voter.pk])
+        self.assertEqual(second_result["accepted"], 0)
+        self.assertEqual(second_result["already_voted"], 1)
+
+    def test_admin_can_accept_selected_voter_as_paper_vote(self):
+        response = self.client.post(
+            reverse("admin:election_voterparticipation_changelist"),
+            {
+                "action": "accept_as_paper_vote",
+                "_selected_action": [self.voter.pk],
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "1名を書面投票受付済みにしました。",
+        )
+        self.voter.refresh_from_db()
+        self.assertEqual(
+            self.voter.voting_method,
+            VoterParticipation.VotingMethod.PAPER,
+        )
+
+    def test_paper_ballot_is_anonymous_and_marked_as_paper(self):
+        ballot = create_paper_ballot(
+            self.election,
+            [self.candidate],
+        )
+
+        self.assertEqual(
+            ballot.voting_method,
+            Ballot.VotingMethod.PAPER,
+        )
+        self.assertEqual(
+            ballot.choices.get().candidate,
+            self.candidate,
+        )
+        self.assertFalse(hasattr(ballot, "voter_participation"))
+
+    def test_admin_can_enter_one_paper_ballot(self):
+        url = reverse(
+            "admin:election_election_paper_ballot",
+            args=[self.election.pk],
+        )
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "書面票入力")
+
+        response = self.client.post(
+            url,
+            {"candidates": [self.candidate.pk]},
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "書面票を匿名票として1票登録しました。",
+        )
+        self.assertEqual(
+            Ballot.objects.filter(
+                election=self.election,
+                voting_method=Ballot.VotingMethod.PAPER,
+            ).count(),
+            1,
+        )
+
+    def test_counted_election_rejects_paper_ballots(self):
+        self.election.status = Election.Status.COUNTED
+        self.election.save(update_fields=["status"])
+
+        with self.assertRaises(ValidationError):
+            create_paper_ballot(self.election, [self.candidate])
 
 
 class AdminModelOrderTest(SimpleTestCase):
@@ -252,6 +419,140 @@ class MemberCsvImportAdminTest(TestCase):
         self.assertIn(reverse("admin:login"), response.url)
 
 
+class ElectionCycleSetupTest(TestCase):
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="cycle-admin",
+            email="cycle@example.com",
+            password="password",
+        )
+        self.client.force_login(self.user)
+        self.now = timezone.now().replace(microsecond=0)
+        self.cycle = ElectionCycle.objects.create(
+            year=2036,
+            name="2036年度選挙",
+            preliminary_start_at=self.now,
+            preliminary_end_at=self.now + timedelta(days=7),
+            final_start_at=self.now + timedelta(days=14),
+            final_end_at=self.now + timedelta(days=21),
+        )
+
+    def csv_file(self):
+        return SimpleUploadedFile(
+            "members.csv",
+            (
+                CSV_HEADER
+                + "m101,一般 太郎,正会員,大学,加速器大学,"
+                "general@example.com\n"
+                + "m102,企業 花子,正会員,企業関係,加速器株式会社,"
+                "corporate@example.com\n"
+            ).encode("utf-8-sig"),
+            content_type="text/csv",
+        )
+
+    def test_setup_creates_six_elections_with_shared_periods(self):
+        result = setup_cycle(self.cycle)
+
+        elections = Election.objects.filter(cycle=self.cycle)
+        self.assertEqual(result.created_elections, 6)
+        self.assertEqual(elections.count(), 6)
+        self.assertEqual(
+            elections.filter(phase=Election.Phase.PRELIMINARY).count(),
+            3,
+        )
+        self.assertEqual(
+            elections.filter(phase=Election.Phase.FINAL).count(),
+            3,
+        )
+        self.assertFalse(
+            elections.exclude(status=Election.Status.DRAFT).exists()
+        )
+        for election in elections:
+            expected = (
+                (
+                    self.cycle.preliminary_start_at,
+                    self.cycle.preliminary_end_at,
+                )
+                if election.phase == Election.Phase.PRELIMINARY
+                else (
+                    self.cycle.final_start_at,
+                    self.cycle.final_end_at,
+                )
+            )
+            self.assertEqual(
+                (election.start_at, election.end_at),
+                expected,
+            )
+
+    def test_setup_updates_periods_without_duplicating_elections(self):
+        setup_cycle(self.cycle)
+        changed_start = self.now + timedelta(days=1)
+        self.cycle.preliminary_start_at = changed_start
+        self.cycle.save(update_fields=["preliminary_start_at"])
+
+        result = setup_cycle(self.cycle)
+
+        self.assertEqual(result.created_elections, 0)
+        self.assertEqual(result.existing_elections, 6)
+        self.assertEqual(self.cycle.elections.count(), 6)
+        self.assertFalse(
+            self.cycle.elections.filter(
+                phase=Election.Phase.PRELIMINARY,
+            ).exclude(start_at=changed_start).exists()
+        )
+
+    def test_cycle_import_populates_voters_and_preliminary_candidates(self):
+        setup_cycle(self.cycle)
+        response = self.client.post(
+            reverse(
+                "admin:election_electioncycle_import_members",
+                args=[self.cycle.pk],
+            ),
+            {"csv_file": self.csv_file()},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "会員リストを取り込みました。")
+        elections = Election.objects.filter(cycle=self.cycle)
+        self.assertEqual(elections.count(), 6)
+        for election in elections:
+            self.assertEqual(election.voter_participations.count(), 2)
+            if election.phase == Election.Phase.PRELIMINARY:
+                expected_candidates = (
+                    2
+                    if election.office == Election.Office.PRESIDENT
+                    else 1
+                )
+                self.assertEqual(
+                    election.candidates.count(),
+                    expected_candidates,
+                )
+
+    def test_cycle_admin_creation_automatically_creates_elections(self):
+        response = self.client.post(
+            reverse("admin:election_electioncycle_add"),
+            {
+                "year": 2037,
+                "name": "2037年度選挙",
+                "preliminary_start_at_0": "2037-01-01",
+                "preliminary_start_at_1": "09:00:00",
+                "preliminary_end_at_0": "2037-01-08",
+                "preliminary_end_at_1": "09:00:00",
+                "final_start_at_0": "2037-02-01",
+                "final_start_at_1": "09:00:00",
+                "final_end_at_0": "2037-02-08",
+                "final_end_at_1": "09:00:00",
+                "_save": "保存",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        cycle = ElectionCycle.objects.get(year=2037)
+        self.assertEqual(cycle.elections.count(), 6)
+
+
 class PreliminaryElectionCandidateGenerationTest(TestCase):
 
     def setUp(self):
@@ -402,6 +703,48 @@ class CountPreviewTest(TestCase):
         self.assertContains(preview_response, "投票総数")
         self.assertNotContains(preview_response, "この内容で開票を確定")
 
+    def test_counted_final_result_can_be_downloaded_as_csv(self):
+        change_response = self.client.get(reverse(
+            "admin:election_election_change",
+            args=[self.election.pk],
+        ))
+        self.assertContains(change_response, "結果CSVをダウンロード")
+
+        response = self.client.get(reverse(
+            "admin:election_election_result_csv",
+            args=[self.election.pk],
+        ))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/csv; charset=utf-8")
+        self.assertIn(
+            'filename="president-2029.csv"',
+            response["Content-Disposition"],
+        )
+        content = response.content.decode("utf-8-sig")
+        rows = list(csv.DictReader(StringIO(content)))
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["member_no"], "m002")
+        self.assertEqual(rows[0]["vote_count"], "2")
+
+    def test_result_csv_is_unavailable_before_counting(self):
+        self.election.status = Election.Status.CLOSED
+        self.election.save(update_fields=["status"])
+
+        response = self.client.get(
+            reverse(
+                "admin:election_election_result_csv",
+                args=[self.election.pk],
+            ),
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "CSVを出力できるのは開票済みの本選挙だけです。",
+        )
+
     def test_tied_president_election_can_be_decided_by_lottery(self):
         ballot = Ballot.objects.create(election=self.election)
         BallotChoice.objects.create(
@@ -463,3 +806,286 @@ class CountPreviewTest(TestCase):
             args=[self.election.pk],
         ))
         self.assertContains(result_response, "抽選は実行済みです")
+
+    def test_candidate_route_labels_appear_only_when_accepted_exists(self):
+        self.high_vote.status = Candidate.Status.ACCEPTED
+        self.high_vote.manifesto = "学会の発展に尽力します。\n若手を支援します。"
+        self.high_vote.save(update_fields=["status", "manifesto"])
+        candidates = list(
+            Candidate.objects.filter(election=self.election)
+            .select_related("member")
+            .order_by("member__member_no")
+        )
+        show_labels = should_show_candidate_route_labels(self.election)
+
+        self.assertTrue(show_labels)
+        for template_name in (
+            "election/ballot.html",
+            "election/ballot_confirm.html",
+        ):
+            with self.subTest(template_name=template_name):
+                rendered = render_to_string(template_name, {
+                    "election": self.election,
+                    "candidates": candidates,
+                    "vote_limit": self.election.vote_limit,
+                    "selected_candidate_ids": [],
+                    "show_candidate_route_labels": show_labels,
+                })
+                self.assertIn("山田 太郎(推)", rendered)
+                self.assertIn("佐藤 太郎(立)", rendered)
+                if template_name == "election/ballot.html":
+                    self.assertIn("(立)：立候補", rendered)
+                    self.assertIn("(推)：予備選挙による推薦", rendered)
+                    self.assertIn("学会の発展に尽力します。", rendered)
+                    self.assertIn("<br>", rendered)
+
+        self.high_vote.status = Candidate.Status.QUALIFIED
+        self.high_vote.save(update_fields=["status"])
+        self.assertFalse(
+            should_show_candidate_route_labels(self.election)
+        )
+        rendered = render_to_string("election/ballot.html", {
+            "election": self.election,
+            "candidates": candidates,
+            "vote_limit": self.election.vote_limit,
+            "selected_candidate_ids": [],
+            "show_candidate_route_labels": False,
+        })
+        self.assertNotIn("(推)", rendered)
+        self.assertNotIn("(立)", rendered)
+        self.assertNotIn("候補者区分の説明", rendered)
+
+
+class RepresentativeElectionRulesTest(TestCase):
+
+    def setUp(self):
+        self.cycle = ElectionCycle.objects.create(
+            year=2030,
+            name="2030年度選挙",
+        )
+        self.general_member = self.create_member(
+            "g001",
+            MemberSnapshot.RepresentativeCategory.GENERAL,
+        )
+        self.corporate_member = self.create_member(
+            "c001",
+            MemberSnapshot.RepresentativeCategory.CORPORATE,
+        )
+        self.now = timezone.now()
+
+    def create_member(self, number, category):
+        return MemberSnapshot.objects.create(
+            cycle=self.cycle,
+            member_no=number,
+            last_name="会員",
+            first_name=number,
+            email=f"{number}@example.com",
+            employee_type="正会員",
+            representative_category=category,
+            is_eligible_voter=True,
+        )
+
+    def create_election(self, phase, category, status=Election.Status.DRAFT):
+        return Election.objects.create(
+            cycle=self.cycle,
+            office=Election.Office.REPRESENTATIVE,
+            representative_category=category,
+            phase=phase,
+            status=status,
+            start_at=self.now,
+            end_at=self.now + timedelta(days=1),
+        )
+
+    def test_general_and_corporate_elections_can_exist_separately(self):
+        general = self.create_election(
+            Election.Phase.PRELIMINARY,
+            Election.RepresentativeCategory.GENERAL,
+        )
+        corporate = self.create_election(
+            Election.Phase.PRELIMINARY,
+            Election.RepresentativeCategory.CORPORATE,
+        )
+
+        self.assertEqual(general.candidates.count(), 1)
+        self.assertEqual(general.candidates.get().member, self.general_member)
+        self.assertEqual(corporate.candidates.count(), 1)
+        self.assertEqual(
+            corporate.candidates.get().member,
+            self.corporate_member,
+        )
+        self.assertEqual(general.voter_participations.count(), 2)
+        self.assertEqual(corporate.voter_participations.count(), 2)
+
+    def test_vote_limits_follow_category_and_phase(self):
+        cases = [
+            (Election.Phase.PRELIMINARY, Election.RepresentativeCategory.GENERAL, 10),
+            (Election.Phase.PRELIMINARY, Election.RepresentativeCategory.CORPORATE, 2),
+            (Election.Phase.FINAL, Election.RepresentativeCategory.GENERAL, 25),
+            (Election.Phase.FINAL, Election.RepresentativeCategory.CORPORATE, 5),
+        ]
+        for phase, category, limit in cases:
+            with self.subTest(phase=phase, category=category):
+                election = self.create_election(phase, category)
+                self.assertEqual(election.vote_limit, limit)
+                self.assertIsNone(validate_vote(election, list(range(limit))))
+                self.assertIn(
+                    f"最大{limit}名",
+                    validate_vote(election, list(range(limit + 1))),
+                )
+
+    def test_representative_election_requires_category(self):
+        election = Election(
+            cycle=self.cycle,
+            office=Election.Office.REPRESENTATIVE,
+            phase=Election.Phase.PRELIMINARY,
+            start_at=self.now,
+            end_at=self.now + timedelta(days=1),
+        )
+
+        with self.assertRaises(ValidationError):
+            election.full_clean()
+
+    def test_final_seat_count_depends_on_category(self):
+        for category, seats, member in (
+            (Election.RepresentativeCategory.GENERAL, 25, self.general_member),
+            (Election.RepresentativeCategory.CORPORATE, 5, self.corporate_member),
+        ):
+            with self.subTest(category=category):
+                election = self.create_election(
+                    Election.Phase.FINAL,
+                    category,
+                    status=Election.Status.CLOSED,
+                )
+                Candidate.objects.create(
+                    election=election,
+                    member=member,
+                    status=Candidate.Status.ACCEPTED,
+                )
+                preview = preview_election_count(election)
+                self.assertEqual(preview["result"]["seats"], seats)
+
+    def test_three_preliminary_votes_qualify_for_same_category_final(self):
+        preliminary = self.create_election(
+            Election.Phase.PRELIMINARY,
+            Election.RepresentativeCategory.GENERAL,
+            status=Election.Status.CLOSED,
+        )
+        final = self.create_election(
+            Election.Phase.FINAL,
+            Election.RepresentativeCategory.GENERAL,
+        )
+        candidate = preliminary.candidates.get()
+        for _ in range(3):
+            ballot = Ballot.objects.create(election=preliminary)
+            BallotChoice.objects.create(ballot=ballot, candidate=candidate)
+
+        preview = preview_election_count(preliminary)
+
+        self.assertEqual(preview["threshold"], 3)
+        self.assertEqual(preview["qualified"], [candidate])
+        self.assertEqual(preview["final"], final)
+
+    def test_voter_screens_display_representative_category(self):
+        election = self.create_election(
+            Election.Phase.PRELIMINARY,
+            Election.RepresentativeCategory.CORPORATE,
+        )
+
+        self.assertEqual(
+            election.election_type_display,
+            "代議員（企業枠）",
+        )
+        for template_name in (
+            "election/already_voted.html",
+            "election/election_closed.html",
+            "election/vote_completed.html",
+        ):
+            with self.subTest(template_name=template_name):
+                rendered = render_to_string(template_name, {
+                    "election": election,
+                    "submitted_at": self.now,
+                })
+                self.assertIn("代議員（企業枠）・予備選挙", rendered)
+
+    def test_command_election_selection_uses_representative_category(self):
+        corporate = self.create_election(
+            Election.Phase.PRELIMINARY,
+            Election.RepresentativeCategory.CORPORATE,
+        )
+        options = {
+            "office": Election.Office.REPRESENTATIVE,
+            "phase": Election.Phase.PRELIMINARY,
+            "category": Election.RepresentativeCategory.CORPORATE,
+        }
+
+        self.assertEqual(
+            get_selected_election(self.cycle, options),
+            corporate,
+        )
+        options["category"] = None
+        with self.assertRaises(CommandError):
+            get_selected_election(self.cycle, options)
+
+
+class ElectionAdminFormTest(TestCase):
+
+    def setUp(self):
+        self.cycle = ElectionCycle.objects.create(
+            year=2031,
+            name="2031年度選挙",
+        )
+        self.now = timezone.now()
+
+    def make_form(self, election_type):
+        return ElectionAdminForm(data={
+            "cycle": self.cycle.pk,
+            "election_type": election_type,
+            "phase": Election.Phase.PRELIMINARY,
+            "status": Election.Status.DRAFT,
+            "start_at": self.now.strftime("%Y-%m-%d %H:%M:%S"),
+            "end_at": (
+                self.now + timedelta(days=1)
+            ).strftime("%Y-%m-%d %H:%M:%S"),
+        })
+
+    def test_three_election_types_are_mapped_to_internal_fields(self):
+        cases = [
+            (
+                ElectionAdminForm.ElectionType.PRESIDENT,
+                Election.Office.PRESIDENT,
+                "",
+            ),
+            (
+                ElectionAdminForm.ElectionType.REPRESENTATIVE_GENERAL,
+                Election.Office.REPRESENTATIVE,
+                Election.RepresentativeCategory.GENERAL,
+            ),
+            (
+                ElectionAdminForm.ElectionType.REPRESENTATIVE_CORPORATE,
+                Election.Office.REPRESENTATIVE,
+                Election.RepresentativeCategory.CORPORATE,
+            ),
+        ]
+        for election_type, office, category in cases:
+            with self.subTest(election_type=election_type):
+                form = self.make_form(election_type)
+                self.assertTrue(form.is_valid(), form.errors)
+                election = form.save(commit=False)
+                self.assertEqual(election.office, office)
+                self.assertEqual(
+                    election.representative_category,
+                    category,
+                )
+
+    def test_office_field_has_three_user_facing_choices(self):
+        labels = [
+            label
+            for value, label in ElectionAdminForm().fields[
+                "election_type"
+            ].choices
+        ]
+
+        self.assertEqual(
+            labels,
+            ["会長", "代議員（一般枠）", "代議員（企業枠）"],
+        )

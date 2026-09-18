@@ -3,8 +3,12 @@ from django.core.mail import EmailMessage, get_connection
 from django.core.management.base import BaseCommand, CommandError
 from django.template.loader import render_to_string
 
+from election.management.command_utils import (
+    add_category_argument,
+    get_selected_election,
+)
+
 from election.models import (
-    Election,
     ElectionCycle,
 )
 
@@ -51,6 +55,7 @@ class Command(BaseCommand):
             required=True,
             help="テストメール送信先",
         )
+        add_category_argument(parser)
 
         parser.add_argument(
             "--base-url",
@@ -66,8 +71,6 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         year = options["cycle"]
-        office = options["office"]
-        phase = options["phase"]
         recipient = options["to"]
         base_url = options["base_url"]
         dry_run = options["dry_run"]
@@ -89,16 +92,7 @@ class Command(BaseCommand):
                 f"{year}年度のElectionCycleが存在しません。"
             )
 
-        try:
-            election = Election.objects.get(
-                cycle=cycle,
-                office=office,
-                phase=phase,
-            )
-        except Election.DoesNotExist:
-            raise CommandError(
-                "指定されたElectionが存在しません。"
-            )
+        election = get_selected_election(cycle, options)
 
         #
         # テスト用ダミーURL。

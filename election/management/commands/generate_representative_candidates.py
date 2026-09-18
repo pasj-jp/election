@@ -21,6 +21,11 @@ class Command(BaseCommand):
             action="store_true",
             help="DBを変更せず生成予定だけ確認します",
         )
+        parser.add_argument(
+            "--category",
+            choices=["general", "corporate"],
+            required=True,
+        )
 
     def handle(self, *args, **options):
         year = options["cycle"]
@@ -36,6 +41,7 @@ class Command(BaseCommand):
                 cycle=cycle,
                 office=Election.Office.REPRESENTATIVE,
                 phase=Election.Phase.PRELIMINARY,
+                representative_category=options["category"],
             )
         except Election.DoesNotExist as exc:
             raise CommandError(

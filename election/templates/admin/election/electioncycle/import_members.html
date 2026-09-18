@@ -1,0 +1,36 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">ホーム</a>
+    &rsaquo; <a href="{% url 'admin:election_electioncycle_changelist' %}">選挙年度</a>
+    &rsaquo; <a href="{% url 'admin:election_electioncycle_change' cycle.pk %}">{{ cycle }}</a>
+    &rsaquo; 会員リスト取り込み
+</div>
+{% endblock %}
+
+{% block content %}
+<p>
+    {{ cycle }}の会員リストを取り込みます。
+    取り込み後、6種類の選挙へ有権者と予備選挙候補者を自動登録します。
+</p>
+
+<form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+    <fieldset class="module aligned">
+        <div class="form-row{% if form.csv_file.errors %} errors{% endif %}">
+            {{ form.csv_file.errors }}
+            <div>
+                {{ form.csv_file.label_tag }}
+                {{ form.csv_file }}
+                <div class="help">{{ form.csv_file.help_text }}</div>
+            </div>
+        </div>
+    </fieldset>
+    <div class="submit-row">
+        <a href="{% url 'admin:election_electioncycle_change' cycle.pk %}" class="button">キャンセル</a>
+        <input type="submit" value="取り込む" class="default">
+    </div>
+</form>
+{% endblock %}

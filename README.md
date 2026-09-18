@@ -56,15 +56,15 @@ ReleaseにはAnsibleが使用するソースアーカイブとSHA-256ファイ�
 ### 予備選挙
 
 * 選挙権: 正会員
-* 1人最大10名まで推薦可能
-* 企業枠・一般枠を合わせて最大10名
-* 3名以上から推薦された会員が本選挙候補者となる
+* 一般枠と企業枠を別々の選挙として実施
+* 一般枠は1人最大10名、企業枠は1人最大2名まで推薦可能
+* 各選挙で3票以上得票した会員が、それぞれの本選挙候補者となる
 
 ### 本選挙
 
 * 選挙権: 正会員
-* 1人最大10名まで投票可能
-* 企業枠・一般枠を合わせて最大10名
+* 一般枠と企業枠を別々の選挙として実施
+* 一般枠は1人最大25名、企業枠は1人最大5名まで投票可能
 
 定数:
 
@@ -83,6 +83,11 @@ ReleaseにはAnsibleが使用するソースアーカイブとSHA-256ファイ�
 それ以外は一般枠として扱います。
 
 定数境界で同票となった場合は、システム上で抽選を行います。
+
+したがって、各年度には会長・代議員（一般枠）・代議員（企業枠）の
+3種類について、それぞれ予備選挙と本選挙を作成します。
+管理画面で選挙年度と予備選挙・本選挙の期間を登録すると、6件の選挙が
+自動作成されます。個別の選挙画面では状態のみを変更します。
 
 ---
 
@@ -221,9 +226,10 @@ sudo -E -u election \
 
 Excel名簿をCSV UTF-8形式で保存し、次の列を取り込みます。
 
-Django管理画面の「会員リスト」一覧にある「CSVを取り込む」から、
-選挙年度とCSVファイルを選択して取り込めます。UTF-8とCP932に対応し、
-同じ年度・会員番号のデータが既にある場合は更新します。
+Django管理画面で対象の「選挙年度」を開き、「会員リスト取り込み」から
+CSVファイルを選択して取り込めます。UTF-8とCP932に対応し、同じ年度・
+会員番号のデータが既にある場合は更新します。取り込み後、6件の選挙へ
+有権者が、3件の予備選挙へ候補者が自動登録されます。
 
 | CSV列 | Django | 用途 |
 | --- | --- | --- |
@@ -283,8 +289,12 @@ sudo -E -u election \
 sudo -E -u election \
   /opt/election/.venv/bin/python manage.py \
   generate_representative_candidates \
-  --cycle 2027
+  --cycle 2027 \
+  --category general
 ```
+
+企業枠は `--category corporate` を指定します。代議員選挙を対象とする
+ほかの管理コマンドでも、同様に `--category` の指定が必要です。
 
 ## 会長予備選挙
 
@@ -313,7 +323,8 @@ sudo -E -u election \
   generate_voters \
   --cycle 2027 \
   --office representative \
-  --phase preliminary
+  --phase preliminary \
+  --category general
 ```
 
 会長:
@@ -401,6 +412,7 @@ sudo -E -u election \
   --cycle 2027 \
   --office representative \
   --phase preliminary \
+  --category general \
   --base-url https://vote.pasj.jp/v/
 ```
 
@@ -485,6 +497,20 @@ transaction commit
       ↓
 session破棄
 ```
+
+---
+
+# 15.1 書面投票
+
+電子投票と書面投票を併用する場合は、Django Adminで次の順に登録します。
+
+1. 「有権者」で対象者を選択し、「選択した有権者を書面投票受付済みにする」を実行
+2. 「選挙」の編集画面から「書面票入力」を開き、投票用紙1枚ずつ投票先を登録
+
+書面投票を受け付けた有権者は投票済みとなり、同じ会員の電子投票は受け付けません。
+書面票は匿名の `Ballot` として保存され、有権者との関連は持ちません。
+
+書面票入力画面には、書面投票の受付人数と匿名の書面票数が表示されます。すべての入力後に両者が一致することを確認してください。開票済みの選挙には、受付および書面票の追加はできません。
 
 ---
 
@@ -709,6 +735,7 @@ sudo -E -u election \
   /opt/election/.venv/bin/python manage.py \
   count_representative_preliminary \
   --cycle 2027 \
+  --category general \
   --dry-run
 ```
 
@@ -718,7 +745,8 @@ sudo -E -u election \
 sudo -E -u election \
   /opt/election/.venv/bin/python manage.py \
   count_representative_preliminary \
-  --cycle 2027
+  --cycle 2027 \
+  --category general
 ```
 
 3票以上で本選挙進出です。
@@ -747,6 +775,7 @@ sudo -E -u election \
 ```text
 office = representative
 phase  = final
+representative_category = general または corporate
 status = closed
 ```
 
@@ -862,6 +891,7 @@ sudo -E -u election \
   /opt/election/.venv/bin/python manage.py \
   count_representative_final \
   --cycle 2027 \
+  --category general \
   --dry-run
 ```
 
@@ -871,7 +901,8 @@ sudo -E -u election \
 sudo -E -u election \
   /opt/election/.venv/bin/python manage.py \
   count_representative_final \
-  --cycle 2027
+  --cycle 2027 \
+  --category general
 ```
 
 ---
@@ -1040,18 +1071,19 @@ CUIとGUIで同一ロジックを使用します。
 
 Election詳細画面に開票結果を直接表示します。
 
-代議員本選挙:
+代議員本選挙（枠ごと）:
 
 ```text
 開票結果サマリー
 
-一般枠 25 / 25
-企業枠  5 / 5
+一般枠: 当選者 25名
 
-代議員30名が確定しています。
+または
+
+企業枠: 当選者 5名
 ```
 
-一般枠・企業枠の当選者について、
+各選挙の当選者について、
 
 * 会員番号
 * 氏名
@@ -1095,13 +1127,20 @@ KEK
 
 # 41. 最終結果 CUI
 
+開票済みの本選挙は、Django Adminの選挙詳細画面にある
+「結果CSVをダウンロード」からCSVを保存できます。未実行の抽選がある場合は、
+抽選完了後にダウンロードできるようになります。
+
+CUIから出力する場合は、以下のコマンドを使用します。
+
 ## 代議員
 
 ```bash
 sudo -E -u election \
   /opt/election/.venv/bin/python manage.py \
   show_representative_results \
-  --cycle 2027
+  --cycle 2027 \
+  --category general
 ```
 
 CSV:
@@ -1111,6 +1150,7 @@ sudo -E -u election \
   /opt/election/.venv/bin/python manage.py \
   show_representative_results \
   --cycle 2027 \
+  --category general \
   --output /opt/election/results/representative-2027.csv
 ```
 
@@ -1140,7 +1180,8 @@ Django Admin
 ├── 開票確定
 ├── 抽選プレビュー
 ├── 抽選実行
-└── 最終結果確認
+├── 最終結果確認
+└── 結果CSVダウンロード
 ```
 
 CUI:
@@ -1377,8 +1418,6 @@ tokenログ対策
 会長予備選挙 GUI開票
 会長本選挙 GUI開票
 メール送信 GUI
-会員名簿取り込み GUI
-選挙作成ウィザード
 ```
 
 なども追加できます。
@@ -1388,15 +1427,12 @@ tokenログ対策
 # 51. 基本運用イメージ
 
 ```text
-会員名簿CSV取り込み
-   ↓
 ElectionCycle作成
+（予備選挙・本選挙の期間を設定）
    ↓
-Election作成
+Cycle画面から会員名簿CSV取り込み
    ↓
-候補者生成
-   ↓
-有権者生成
+6件のElection・有権者・予備選挙候補者を自動生成
    ↓
 token発行・メール送信
    ↓

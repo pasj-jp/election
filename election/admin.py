@@ -1,3 +1,4 @@
+import csv
 from io import StringIO
 
 from django.contrib import admin, messages
@@ -6,10 +7,16 @@ from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db.models import Count, Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
 
-from .forms import MemberCsvImportForm
+from .forms import (
+    CycleMemberCsvImportForm,
+    ElectionCycleAdminForm,
+    MemberCsvImportForm,
+    PaperBallotForm,
+)
 from .models import (
     Ballot,
     Candidate,
@@ -25,12 +32,15 @@ from .services.counting import (
     commit_election_count,
     preview_election_count,
 )
+from .services.cycle_setup import setup_cycle
 
 from .services.lottery import (
     execute_lottery,
     preview_lottery,
 )
 from .services.member_import import MemberImportError, import_members
+from .services.paper_voting import accept_paper_votes, create_paper_ballot
+from .services.result_export import build_result_export
 
 
 admin.site.site_header = "加速器学会選挙システム"
@@ -71,9 +81,18 @@ admin.site.get_app_list = get_ordered_app_list
 
 @admin.register(ElectionCycle)
 class ElectionCycleAdmin(admin.ModelAdmin):
+    form = ElectionCycleAdminForm
+    change_form_template = (
+        "admin/election/electioncycle/change_form.html"
+    )
+
     list_display = (
         "year",
         "name",
+        "preliminary_start_at",
+        "preliminary_end_at",
+        "final_start_at",
+        "final_end_at",
         "created_at",
     )
 
@@ -81,9 +100,116 @@ class ElectionCycleAdmin(admin.ModelAdmin):
         "-year",
     )
 
+    def get_urls(self):
+        custom_urls = [
+            path(
+                "<path:object_id>/import-members/",
+                self.admin_site.admin_view(
+                    self.import_members_view
+                ),
+                name="election_electioncycle_import_members",
+            ),
+        ]
+        return custom_urls + super().get_urls()
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        request._cycle_setup_result = setup_cycle(obj)
+
+    def _show_setup_message(self, request):
+        result = getattr(request, "_cycle_setup_result", None)
+        if not result:
+            return
+        self.message_user(
+            request,
+            (
+                f"選挙を{result.created_elections}件追加し、"
+                f"既存{result.existing_elections}件の期間を同期しました。"
+            ),
+            messages.SUCCESS,
+        )
+
+    def response_add(self, request, obj, post_url_continue=None):
+        self._show_setup_message(request)
+        return super().response_add(request, obj, post_url_continue)
+
+    def response_change(self, request, obj):
+        self._show_setup_message(request)
+        return super().response_change(request, obj)
+
+    def import_members_view(self, request, object_id):
+        cycle = get_object_or_404(ElectionCycle, pk=object_id)
+        if not self.has_change_permission(request, cycle):
+            raise PermissionDenied
+
+        form = CycleMemberCsvImportForm(
+            request.POST or None,
+            request.FILES or None,
+        )
+        if request.method == "POST" and form.is_valid():
+            uploaded_file = form.cleaned_data["csv_file"]
+            try:
+                result = import_members(uploaded_file.read(), cycle)
+                setup_result = setup_cycle(cycle)
+            except (MemberImportError, ValueError) as exc:
+                form.add_error("csv_file", str(exc))
+            else:
+                self.message_user(
+                    request,
+                    (
+                        "会員リストを取り込みました。"
+                        f" 新規: {result.created_count}件、"
+                        f"更新: {result.updated_count}件、"
+                        f"変更なし: {result.unchanged_count}件。"
+                        f" 有権者: {setup_result.created_voters}件追加、"
+                        f"候補者: {setup_result.created_candidates}件追加。"
+                    ),
+                    messages.SUCCESS,
+                )
+                for warning in result.warnings:
+                    self.message_user(request, warning, messages.WARNING)
+                return redirect(
+                    "admin:election_electioncycle_change",
+                    object_id=cycle.pk,
+                )
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "cycle": cycle,
+            "form": form,
+            "title": "会員リスト取り込み",
+        }
+        return render(
+            request,
+            "admin/election/electioncycle/import_members.html",
+            context,
+        )
+
 
 @admin.register(Election)
 class ElectionAdmin(admin.ModelAdmin):
+
+    fields = (
+        "cycle",
+        "office",
+        "representative_category",
+        "phase",
+        "start_at",
+        "end_at",
+        "status",
+        "created_at",
+    )
+    readonly_fields = (
+        "cycle",
+        "office",
+        "representative_category",
+        "phase",
+        "start_at",
+        "end_at",
+        "created_at",
+    )
+    list_editable = ("status",)
 
     change_form_template = (
         "admin/election/election/change_form.html"
@@ -93,7 +219,7 @@ class ElectionAdmin(admin.ModelAdmin):
         "cycle",
         "office_display",
         "phase_display",
-        "status_display",
+        "status",
         "start_at",
         "end_at",
         "voter_count_display",
@@ -107,6 +233,7 @@ class ElectionAdmin(admin.ModelAdmin):
     list_filter = (
         "cycle",
         "office",
+        "representative_category",
         "phase",
         "status",
     )
@@ -115,7 +242,14 @@ class ElectionAdmin(admin.ModelAdmin):
         "-cycle__year",
         "phase",
         "office",
+        "representative_category",
     )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
     def response_add(self, request, obj, post_url_continue=None):
         voter_count = obj.voter_participations.count()
@@ -210,9 +344,111 @@ class ElectionAdmin(admin.ModelAdmin):
                 ),
                 name="election_election_email_send",
             ),
+            path(
+                "<path:object_id>/paper-ballot/",
+                self.admin_site.admin_view(
+                    self.paper_ballot_view
+                ),
+                name="election_election_paper_ballot",
+            ),
+            path(
+                "<path:object_id>/result-csv/",
+                self.admin_site.admin_view(
+                    self.result_csv_view
+                ),
+                name="election_election_result_csv",
+            ),
         ]
 
         return custom_urls + urls
+
+    def result_csv_view(self, request, object_id):
+        election = get_object_or_404(
+            Election.objects.select_related("cycle"),
+            pk=object_id,
+        )
+        if not self.has_view_or_change_permission(request, election):
+            raise PermissionDenied
+        try:
+            export = build_result_export(election)
+        except ValidationError as exc:
+            self.message_user(request, str(exc), messages.ERROR)
+            return redirect(
+                "admin:election_election_change",
+                object_id=election.pk,
+            )
+
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = (
+            f'attachment; filename="{export.filename}"'
+        )
+        response.write("\ufeff")
+        writer = csv.DictWriter(response, fieldnames=export.fieldnames)
+        writer.writeheader()
+        writer.writerows(export.rows)
+        return response
+
+    def paper_ballot_view(self, request, object_id):
+        election = get_object_or_404(
+            Election.objects.select_related("cycle"),
+            pk=object_id,
+        )
+        if not self.has_change_permission(request, election):
+            raise PermissionDenied
+
+        change_url = reverse(
+            "admin:election_election_change",
+            args=[election.pk],
+        )
+        if election.status == Election.Status.COUNTED:
+            self.message_user(
+                request,
+                "開票済みの選挙には書面票を登録できません。",
+                messages.ERROR,
+            )
+            return redirect(change_url)
+
+        form = PaperBallotForm(
+            request.POST or None,
+            election=election,
+        )
+        if request.method == "POST" and form.is_valid():
+            try:
+                create_paper_ballot(
+                    election,
+                    form.cleaned_data["candidates"],
+                )
+            except ValidationError as exc:
+                form.add_error(None, exc)
+            else:
+                self.message_user(
+                    request,
+                    "書面票を匿名票として1票登録しました。",
+                    messages.SUCCESS,
+                )
+                return redirect(
+                    "admin:election_election_paper_ballot",
+                    object_id=election.pk,
+                )
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "書面票入力",
+            "election": election,
+            "form": form,
+            "opts": self.model._meta,
+            "paper_ballot_count": election.ballots.filter(
+                voting_method=Ballot.VotingMethod.PAPER,
+            ).count(),
+            "paper_voter_count": election.voter_participations.filter(
+                voting_method=VoterParticipation.VotingMethod.PAPER,
+            ).count(),
+        }
+        return render(
+            request,
+            "admin/election/election/paper_ballot.html",
+            context,
+        )
 
     def get_email_election(self, request, object_id):
         election = get_object_or_404(
@@ -303,6 +539,7 @@ class ElectionAdmin(admin.ModelAdmin):
                 cycle=election.cycle.year,
                 office=election.office,
                 phase=election.phase,
+                category=election.representative_category or None,
                 base_url=base_url,
                 stdout=StringIO(),
                 stderr=StringIO(),
@@ -414,14 +651,7 @@ class ElectionAdmin(admin.ModelAdmin):
 
         lottery_count = 0
         if preview["kind"] == "representative_final":
-            lottery_count = sum(
-                1
-                for result in [
-                    preview["general"],
-                    preview["corporate"],
-                ]
-                if result["lottery_required"]
-            )
+            lottery_count = int(preview["result"]["lottery_required"])
 
         if (
             preview["kind"] == "president_final"
@@ -527,6 +757,14 @@ class ElectionAdmin(admin.ModelAdmin):
                     "result_summary"
                 ] = self.build_result_summary(
                     election
+                )
+                extra_context["result_csv_available"] = (
+                    election.phase == Election.Phase.FINAL
+                    and election.status == Election.Status.COUNTED
+                    and not LotteryDraw.objects.filter(
+                        election=election,
+                        executed_at__isnull=True,
+                    ).exists()
                 )
 
         return super().changeform_view(
@@ -662,7 +900,7 @@ class ElectionAdmin(admin.ModelAdmin):
         ordering="office",
     )
     def office_display(self, obj):
-        return obj.get_office_display()
+        return obj.election_type_display
 
     @admin.display(
         description="区分",
@@ -856,6 +1094,22 @@ class CandidateAdmin(admin.ModelAdmin):
         "member__member_no",
     )
 
+    def is_manifesto_applicable(self, obj):
+        return bool(
+            obj
+            and obj.election.office == Election.Office.PRESIDENT
+            and obj.election.phase == Election.Phase.FINAL
+        )
+
+    def get_fields(self, request, obj=None):
+        fields = list(super().get_fields(request, obj))
+        if (
+            not self.is_manifesto_applicable(obj)
+            and "manifesto" in fields
+        ):
+            fields.remove("manifesto")
+        return fields
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
 
@@ -897,12 +1151,15 @@ class CandidateAdmin(admin.ModelAdmin):
 @admin.register(VoterParticipation)
 class VoterParticipationAdmin(admin.ModelAdmin):
 
+    actions = ("accept_as_paper_vote",)
+
     list_display = (
         "member",
         "election",
         "token_status",
         "email_status",
         "vote_status",
+        "voting_method_display",
         "email_send_attempts",
     )
 
@@ -912,6 +1169,7 @@ class VoterParticipationAdmin(admin.ModelAdmin):
         "election__phase",
         "email_sent_at",
         "voted_at",
+        "voting_method",
     )
 
     search_fields = (
@@ -927,8 +1185,33 @@ class VoterParticipationAdmin(admin.ModelAdmin):
         "email_sent_at",
         "email_send_attempts",
         "voted_at",
+        "voting_method",
         "created_at",
     )
+
+    @admin.action(description="選択した有権者を書面投票受付済みにする")
+    def accept_as_paper_vote(self, request, queryset):
+        result = accept_paper_votes(
+            queryset.values_list("pk", flat=True)
+        )
+        if result["accepted"]:
+            self.message_user(
+                request,
+                f'{result["accepted"]}名を書面投票受付済みにしました。',
+                messages.SUCCESS,
+            )
+        if result["already_voted"]:
+            self.message_user(
+                request,
+                f'{result["already_voted"]}名は投票済みのため変更していません。',
+                messages.WARNING,
+            )
+        if result["counted"]:
+            self.message_user(
+                request,
+                f'{result["counted"]}名は開票済みの選挙のため変更していません。',
+                messages.WARNING,
+            )
 
     @admin.display(
         description="Token",
@@ -956,6 +1239,10 @@ class VoterParticipationAdmin(admin.ModelAdmin):
             obj.voted_at
             is not None
         )
+
+    @admin.display(description="投票方法")
+    def voting_method_display(self, obj):
+        return obj.get_voting_method_display() or "—"
 
 
 class LotteryCandidateInline(admin.TabularInline):

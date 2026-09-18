@@ -8,7 +8,7 @@
         <p class="eyebrow">VOTE CONFIRMATION</p>
         <h1>{{ election.cycle.name }}</h1>
         <p class="election-type">
-            <span>{{ election.get_office_display }}</span>
+            <span>{{ election.election_type_display }}</span>
             <span class="election-phase">{{ election.get_phase_display }}</span>
         </p>
     </header>
@@ -23,7 +23,9 @@
                 <li class="candidate">
                     <span class="candidate-number">{{ forloop.counter }}</span>
                     <span>
-                        <span class="candidate-name">{{ candidate.member.last_name }} {{ candidate.member.first_name }}</span>
+                        <span class="candidate-name">
+                            {% include "election/includes/candidate_name.html" %}
+                        </span>
                         {% if candidate.member.affiliation %}
                             <span class="affiliation">{{ candidate.member.affiliation }}</span>
                         {% endif %}
