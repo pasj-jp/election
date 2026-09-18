@@ -28,20 +28,27 @@ h2 { margin: 0 0 8px; color: #183f52; font-size: 1.35rem; }
 .secondary-button:hover { background: #f5f9fa; }
 
 .candidate-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
-.candidate { display: flex; align-items: flex-start; gap: 13px; min-height: 86px; padding: 17px 18px; background: #fff; border: 1px solid #d7e3e9; border-radius: 10px; box-shadow: 0 3px 10px rgba(28, 66, 84, .05); cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .15s; }
+.candidate { min-height: 86px; padding: 17px 18px; background: #fff; border: 1px solid #d7e3e9; border-radius: 10px; box-shadow: 0 3px 10px rgba(28, 66, 84, .05); transition: border-color .15s, box-shadow .15s, transform .15s; }
 .candidate:hover { border-color: #69a8bd; box-shadow: 0 7px 18px rgba(28, 66, 84, .1); transform: translateY(-1px); }
 .candidate.selected { background: #f1f9fb; border-color: #2583a2; box-shadow: 0 0 0 2px rgba(37, 131, 162, .12); }
+.candidate-selection { display: flex; align-items: flex-start; gap: 13px; cursor: pointer; }
 .candidate input { width: 20px; height: 20px; margin: 2px 0 0; flex: 0 0 auto; accent-color: #167596; }
 .candidate-name { display: block; color: #183f52; font-size: 1.08rem; font-weight: 700; }
 .affiliation { display: block; margin-top: 6px; color: #687b86; font-size: .9rem; line-height: 1.45; }
-.candidate-manifesto { display: block; margin-top: 10px; color: #405b69; font-size: .94rem; font-weight: 400; line-height: 1.7; }
+.candidate-manifesto { margin: 12px 0 0 33px; color: #405b69; font-size: .94rem; font-weight: 400; line-height: 1.7; }
+.candidate-manifesto summary { width: fit-content; color: #167596; cursor: pointer; font-weight: 700; list-style: none; }
+.candidate-manifesto summary::-webkit-details-marker { display: none; }
+.candidate-manifesto .manifesto-open { display: none; }
+.candidate-manifesto[open] .manifesto-closed { display: none; }
+.candidate-manifesto[open] .manifesto-open { display: inline; }
+.candidate-manifesto-text { margin-top: 9px; padding: 12px 14px; background: #f5fafc; border-radius: 8px; }
 .empty { grid-column: 1 / -1; padding: 30px; text-align: center; background: #fff; border-radius: 10px; }
 
 .confirm-panel { overflow: hidden; background: #fff; border: 1px solid #d7e3e9; border-radius: 14px; box-shadow: 0 12px 32px rgba(26, 67, 87, .1); }
 .panel-header { padding: 22px 24px; border-bottom: 1px solid #e1eaee; }
 .panel-header p { margin: 0; color: #617581; line-height: 1.7; }
 .confirm-panel .candidate-list { grid-template-columns: 1fr; gap: 10px; padding: 20px 24px; }
-.confirm-panel .candidate { align-items: center; min-height: 0; padding: 15px 17px; background: #f5fafc; border-color: #d7e7ed; border-radius: 9px; cursor: default; box-shadow: none; }
+.confirm-panel .candidate { display: flex; align-items: center; gap: 13px; min-height: 0; padding: 15px 17px; background: #f5fafc; border-color: #d7e7ed; border-radius: 9px; cursor: default; box-shadow: none; }
 .confirm-panel .candidate:hover { border-color: #d7e7ed; box-shadow: none; transform: none; }
 .candidate-number { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 auto; color: #fff; background: #3888a3; border-radius: 50%; font-size: .84rem; font-weight: 700; }
 .summary { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 17px 24px; background: #f0f7fa; border-top: 1px solid #dbe8ed; }

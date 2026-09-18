@@ -525,6 +525,9 @@ class CountPreviewTest(TestCase):
                 if template_name == "election/ballot.html":
                     self.assertIn("(立)：立候補", rendered)
                     self.assertIn("(推)：予備選挙による推薦", rendered)
+                    self.assertIn('<details class="candidate-manifesto">', rendered)
+                    self.assertIn("抱負 ▼", rendered)
+                    self.assertIn("抱負 ▲", rendered)
                     self.assertIn("学会の発展に尽力します。", rendered)
                     self.assertIn("<br>", rendered)
 

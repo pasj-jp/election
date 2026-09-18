@@ -38,26 +38,34 @@
 
         <div class="candidate-list">
             {% for candidate in candidates %}
-                <label class="candidate">
-                    <input
-                        type="{% if election.office == 'representative' %}checkbox{% else %}radio{% endif %}"
-                        name="candidate"
-                        value="{{ candidate.pk }}"
-                        class="candidate-checkbox"
-                        {% if candidate.pk in selected_candidate_ids %}checked{% endif %}
-                    >
-                    <span>
-                        <span class="candidate-name">
-                            {% include "election/includes/candidate_name.html" %}
+                <div class="candidate">
+                    <label class="candidate-selection">
+                        <input
+                            type="{% if election.office == 'representative' %}checkbox{% else %}radio{% endif %}"
+                            name="candidate"
+                            value="{{ candidate.pk }}"
+                            class="candidate-checkbox"
+                            {% if candidate.pk in selected_candidate_ids %}checked{% endif %}
+                        >
+                        <span>
+                            <span class="candidate-name">
+                                {% include "election/includes/candidate_name.html" %}
+                            </span>
+                            {% if candidate.member.affiliation %}
+                                <span class="affiliation">{{ candidate.member.affiliation }}</span>
+                            {% endif %}
                         </span>
-                        {% if candidate.member.affiliation %}
-                            <span class="affiliation">{{ candidate.member.affiliation }}</span>
-                        {% endif %}
-                        {% if election.office == "president" and election.phase == "final" and candidate.manifesto %}
-                            <span class="candidate-manifesto">{{ candidate.manifesto|linebreaksbr }}</span>
-                        {% endif %}
-                    </span>
-                </label>
+                    </label>
+                    {% if election.office == "president" and election.phase == "final" and candidate.manifesto %}
+                        <details class="candidate-manifesto">
+                            <summary>
+                                <span class="manifesto-closed">抱負 ▼</span>
+                                <span class="manifesto-open">抱負 ▲</span>
+                            </summary>
+                            <div class="candidate-manifesto-text">{{ candidate.manifesto|linebreaksbr }}</div>
+                        </details>
+                    {% endif %}
+                </div>
             {% empty %}
                 <p class="empty">候補者が登録されていません。</p>
             {% endfor %}
