@@ -13,6 +13,27 @@ class ElectionCycle(models.Model):
     year = models.PositiveIntegerField(unique=True)
     name = models.CharField(max_length=200)
 
+    preliminary_start_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="予備選挙開始日時",
+    )
+    preliminary_end_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="予備選挙終了日時",
+    )
+    final_start_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="本選挙開始日時",
+    )
+    final_end_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="本選挙終了日時",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -22,6 +43,27 @@ class ElectionCycle(models.Model):
 
     def __str__(self):
         return self.name
+
+    def clean(self):
+        super().clean()
+        period_pairs = (
+            (
+                "preliminary_start_at",
+                "preliminary_end_at",
+                "予備選挙",
+            ),
+            ("final_start_at", "final_end_at", "本選挙"),
+        )
+        errors = {}
+        for start_field, end_field, label in period_pairs:
+            start_at = getattr(self, start_field)
+            end_at = getattr(self, end_field)
+            if start_at and end_at and start_at >= end_at:
+                errors[end_field] = (
+                    f"{label}の終了日時は開始日時より後にしてください。"
+                )
+        if errors:
+            raise ValidationError(errors)
 
 
 class Election(models.Model):

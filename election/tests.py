@@ -24,6 +24,7 @@ from .models import (
     VoterParticipation,
 )
 from .services.counting import preview_election_count
+from .services.cycle_setup import setup_cycle
 from .services.paper_voting import accept_paper_votes, create_paper_ballot
 from .views import should_show_candidate_route_labels, validate_vote
 
@@ -414,6 +415,140 @@ class MemberCsvImportAdminTest(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertIn(reverse("admin:login"), response.url)
+
+
+class ElectionCycleSetupTest(TestCase):
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="cycle-admin",
+            email="cycle@example.com",
+            password="password",
+        )
+        self.client.force_login(self.user)
+        self.now = timezone.now().replace(microsecond=0)
+        self.cycle = ElectionCycle.objects.create(
+            year=2036,
+            name="2036年度選挙",
+            preliminary_start_at=self.now,
+            preliminary_end_at=self.now + timedelta(days=7),
+            final_start_at=self.now + timedelta(days=14),
+            final_end_at=self.now + timedelta(days=21),
+        )
+
+    def csv_file(self):
+        return SimpleUploadedFile(
+            "members.csv",
+            (
+                CSV_HEADER
+                + "m101,一般 太郎,正会員,大学,加速器大学,"
+                "general@example.com\n"
+                + "m102,企業 花子,正会員,企業関係,加速器株式会社,"
+                "corporate@example.com\n"
+            ).encode("utf-8-sig"),
+            content_type="text/csv",
+        )
+
+    def test_setup_creates_six_elections_with_shared_periods(self):
+        result = setup_cycle(self.cycle)
+
+        elections = Election.objects.filter(cycle=self.cycle)
+        self.assertEqual(result.created_elections, 6)
+        self.assertEqual(elections.count(), 6)
+        self.assertEqual(
+            elections.filter(phase=Election.Phase.PRELIMINARY).count(),
+            3,
+        )
+        self.assertEqual(
+            elections.filter(phase=Election.Phase.FINAL).count(),
+            3,
+        )
+        self.assertFalse(
+            elections.exclude(status=Election.Status.DRAFT).exists()
+        )
+        for election in elections:
+            expected = (
+                (
+                    self.cycle.preliminary_start_at,
+                    self.cycle.preliminary_end_at,
+                )
+                if election.phase == Election.Phase.PRELIMINARY
+                else (
+                    self.cycle.final_start_at,
+                    self.cycle.final_end_at,
+                )
+            )
+            self.assertEqual(
+                (election.start_at, election.end_at),
+                expected,
+            )
+
+    def test_setup_updates_periods_without_duplicating_elections(self):
+        setup_cycle(self.cycle)
+        changed_start = self.now + timedelta(days=1)
+        self.cycle.preliminary_start_at = changed_start
+        self.cycle.save(update_fields=["preliminary_start_at"])
+
+        result = setup_cycle(self.cycle)
+
+        self.assertEqual(result.created_elections, 0)
+        self.assertEqual(result.existing_elections, 6)
+        self.assertEqual(self.cycle.elections.count(), 6)
+        self.assertFalse(
+            self.cycle.elections.filter(
+                phase=Election.Phase.PRELIMINARY,
+            ).exclude(start_at=changed_start).exists()
+        )
+
+    def test_cycle_import_populates_voters_and_preliminary_candidates(self):
+        setup_cycle(self.cycle)
+        response = self.client.post(
+            reverse(
+                "admin:election_electioncycle_import_members",
+                args=[self.cycle.pk],
+            ),
+            {"csv_file": self.csv_file()},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "会員リストを取り込みました。")
+        elections = Election.objects.filter(cycle=self.cycle)
+        self.assertEqual(elections.count(), 6)
+        for election in elections:
+            self.assertEqual(election.voter_participations.count(), 2)
+            if election.phase == Election.Phase.PRELIMINARY:
+                expected_candidates = (
+                    2
+                    if election.office == Election.Office.PRESIDENT
+                    else 1
+                )
+                self.assertEqual(
+                    election.candidates.count(),
+                    expected_candidates,
+                )
+
+    def test_cycle_admin_creation_automatically_creates_elections(self):
+        response = self.client.post(
+            reverse("admin:election_electioncycle_add"),
+            {
+                "year": 2037,
+                "name": "2037年度選挙",
+                "preliminary_start_at_0": "2037-01-01",
+                "preliminary_start_at_1": "09:00:00",
+                "preliminary_end_at_0": "2037-01-08",
+                "preliminary_end_at_1": "09:00:00",
+                "final_start_at_0": "2037-02-01",
+                "final_start_at_1": "09:00:00",
+                "final_end_at_0": "2037-02-08",
+                "final_end_at_1": "09:00:00",
+                "_save": "保存",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        cycle = ElectionCycle.objects.get(year=2037)
+        self.assertEqual(cycle.elections.count(), 6)
 
 
 class PreliminaryElectionCandidateGenerationTest(TestCase):

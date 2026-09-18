@@ -9,7 +9,12 @@ from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
 
-from .forms import ElectionAdminForm, MemberCsvImportForm, PaperBallotForm
+from .forms import (
+    CycleMemberCsvImportForm,
+    ElectionCycleAdminForm,
+    MemberCsvImportForm,
+    PaperBallotForm,
+)
 from .models import (
     Ballot,
     Candidate,
@@ -25,6 +30,7 @@ from .services.counting import (
     commit_election_count,
     preview_election_count,
 )
+from .services.cycle_setup import setup_cycle
 
 from .services.lottery import (
     execute_lottery,
@@ -72,9 +78,18 @@ admin.site.get_app_list = get_ordered_app_list
 
 @admin.register(ElectionCycle)
 class ElectionCycleAdmin(admin.ModelAdmin):
+    form = ElectionCycleAdminForm
+    change_form_template = (
+        "admin/election/electioncycle/change_form.html"
+    )
+
     list_display = (
         "year",
         "name",
+        "preliminary_start_at",
+        "preliminary_end_at",
+        "final_start_at",
+        "final_end_at",
         "created_at",
     )
 
@@ -82,11 +97,116 @@ class ElectionCycleAdmin(admin.ModelAdmin):
         "-year",
     )
 
+    def get_urls(self):
+        custom_urls = [
+            path(
+                "<path:object_id>/import-members/",
+                self.admin_site.admin_view(
+                    self.import_members_view
+                ),
+                name="election_electioncycle_import_members",
+            ),
+        ]
+        return custom_urls + super().get_urls()
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        request._cycle_setup_result = setup_cycle(obj)
+
+    def _show_setup_message(self, request):
+        result = getattr(request, "_cycle_setup_result", None)
+        if not result:
+            return
+        self.message_user(
+            request,
+            (
+                f"選挙を{result.created_elections}件追加し、"
+                f"既存{result.existing_elections}件の期間を同期しました。"
+            ),
+            messages.SUCCESS,
+        )
+
+    def response_add(self, request, obj, post_url_continue=None):
+        self._show_setup_message(request)
+        return super().response_add(request, obj, post_url_continue)
+
+    def response_change(self, request, obj):
+        self._show_setup_message(request)
+        return super().response_change(request, obj)
+
+    def import_members_view(self, request, object_id):
+        cycle = get_object_or_404(ElectionCycle, pk=object_id)
+        if not self.has_change_permission(request, cycle):
+            raise PermissionDenied
+
+        form = CycleMemberCsvImportForm(
+            request.POST or None,
+            request.FILES or None,
+        )
+        if request.method == "POST" and form.is_valid():
+            uploaded_file = form.cleaned_data["csv_file"]
+            try:
+                result = import_members(uploaded_file.read(), cycle)
+                setup_result = setup_cycle(cycle)
+            except (MemberImportError, ValueError) as exc:
+                form.add_error("csv_file", str(exc))
+            else:
+                self.message_user(
+                    request,
+                    (
+                        "会員リストを取り込みました。"
+                        f" 新規: {result.created_count}件、"
+                        f"更新: {result.updated_count}件、"
+                        f"変更なし: {result.unchanged_count}件。"
+                        f" 有権者: {setup_result.created_voters}件追加、"
+                        f"候補者: {setup_result.created_candidates}件追加。"
+                    ),
+                    messages.SUCCESS,
+                )
+                for warning in result.warnings:
+                    self.message_user(request, warning, messages.WARNING)
+                return redirect(
+                    "admin:election_electioncycle_change",
+                    object_id=cycle.pk,
+                )
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "cycle": cycle,
+            "form": form,
+            "title": "会員リスト取り込み",
+        }
+        return render(
+            request,
+            "admin/election/electioncycle/import_members.html",
+            context,
+        )
+
 
 @admin.register(Election)
 class ElectionAdmin(admin.ModelAdmin):
 
-    form = ElectionAdminForm
+    fields = (
+        "cycle",
+        "office",
+        "representative_category",
+        "phase",
+        "start_at",
+        "end_at",
+        "status",
+        "created_at",
+    )
+    readonly_fields = (
+        "cycle",
+        "office",
+        "representative_category",
+        "phase",
+        "start_at",
+        "end_at",
+        "created_at",
+    )
+    list_editable = ("status",)
 
     change_form_template = (
         "admin/election/election/change_form.html"
@@ -96,7 +216,7 @@ class ElectionAdmin(admin.ModelAdmin):
         "cycle",
         "office_display",
         "phase_display",
-        "status_display",
+        "status",
         "start_at",
         "end_at",
         "voter_count_display",
@@ -121,6 +241,12 @@ class ElectionAdmin(admin.ModelAdmin):
         "office",
         "representative_category",
     )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
     def response_add(self, request, obj, post_url_continue=None):
         voter_count = obj.voter_participations.count()

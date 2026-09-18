@@ -5,6 +5,22 @@ from .models import Candidate, Election, ElectionCycle
 from .views import get_valid_candidate_statuses, validate_vote
 
 
+class ElectionCycleAdminForm(forms.ModelForm):
+    class Meta:
+        model = ElectionCycle
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field_name in (
+            "preliminary_start_at",
+            "preliminary_end_at",
+            "final_start_at",
+            "final_end_at",
+        ):
+            self.fields[field_name].required = True
+
+
 class ElectionAdminForm(forms.ModelForm):
     class ElectionType(models.TextChoices):
         PRESIDENT = "president", "会長"
@@ -79,6 +95,19 @@ class MemberCsvImportForm(forms.Form):
     )
     csv_file = forms.FileField(
         label="会員名簿CSV",
+        help_text="UTF-8またはCP932（ExcelのCSV）に対応しています。",
+    )
+
+    def clean_csv_file(self):
+        uploaded_file = self.cleaned_data["csv_file"]
+        if not uploaded_file.name.lower().endswith(".csv"):
+            raise forms.ValidationError("CSVファイルを選択してください。")
+        return uploaded_file
+
+
+class CycleMemberCsvImportForm(forms.Form):
+    csv_file = forms.FileField(
+        label="会員リストCSV",
         help_text="UTF-8またはCP932（ExcelのCSV）に対応しています。",
     )
 

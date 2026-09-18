@@ -2,10 +2,5 @@
 {% load i18n admin_urls %}
 
 {% block object-tools-items %}
-    <li>
-        <a href="{% url 'admin:election_membersnapshot_import_csv' %}">
-            CSVを取り込む
-        </a>
-    </li>
     {{ block.super }}
 {% endblock %}
