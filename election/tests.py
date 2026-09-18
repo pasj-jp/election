@@ -1,4 +1,6 @@
+import csv
 from datetime import timedelta
+from io import StringIO
 
 from django.contrib import admin
 from django.contrib.auth import get_user_model
@@ -700,6 +702,48 @@ class CountPreviewTest(TestCase):
         ))
         self.assertContains(preview_response, "投票総数")
         self.assertNotContains(preview_response, "この内容で開票を確定")
+
+    def test_counted_final_result_can_be_downloaded_as_csv(self):
+        change_response = self.client.get(reverse(
+            "admin:election_election_change",
+            args=[self.election.pk],
+        ))
+        self.assertContains(change_response, "結果CSVをダウンロード")
+
+        response = self.client.get(reverse(
+            "admin:election_election_result_csv",
+            args=[self.election.pk],
+        ))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/csv; charset=utf-8")
+        self.assertIn(
+            'filename="president-2029.csv"',
+            response["Content-Disposition"],
+        )
+        content = response.content.decode("utf-8-sig")
+        rows = list(csv.DictReader(StringIO(content)))
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["member_no"], "m002")
+        self.assertEqual(rows[0]["vote_count"], "2")
+
+    def test_result_csv_is_unavailable_before_counting(self):
+        self.election.status = Election.Status.CLOSED
+        self.election.save(update_fields=["status"])
+
+        response = self.client.get(
+            reverse(
+                "admin:election_election_result_csv",
+                args=[self.election.pk],
+            ),
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "CSVを出力できるのは開票済みの本選挙だけです。",
+        )
 
     def test_tied_president_election_can_be_decided_by_lottery(self):
         ballot = Ballot.objects.create(election=self.election)

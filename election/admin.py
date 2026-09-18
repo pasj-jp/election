@@ -1,3 +1,4 @@
+import csv
 from io import StringIO
 
 from django.contrib import admin, messages
@@ -6,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db.models import Count, Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
 
@@ -38,6 +40,7 @@ from .services.lottery import (
 )
 from .services.member_import import MemberImportError, import_members
 from .services.paper_voting import accept_paper_votes, create_paper_ballot
+from .services.result_export import build_result_export
 
 
 admin.site.site_header = "加速器学会選挙システム"
@@ -348,9 +351,42 @@ class ElectionAdmin(admin.ModelAdmin):
                 ),
                 name="election_election_paper_ballot",
             ),
+            path(
+                "<path:object_id>/result-csv/",
+                self.admin_site.admin_view(
+                    self.result_csv_view
+                ),
+                name="election_election_result_csv",
+            ),
         ]
 
         return custom_urls + urls
+
+    def result_csv_view(self, request, object_id):
+        election = get_object_or_404(
+            Election.objects.select_related("cycle"),
+            pk=object_id,
+        )
+        if not self.has_view_or_change_permission(request, election):
+            raise PermissionDenied
+        try:
+            export = build_result_export(election)
+        except ValidationError as exc:
+            self.message_user(request, str(exc), messages.ERROR)
+            return redirect(
+                "admin:election_election_change",
+                object_id=election.pk,
+            )
+
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = (
+            f'attachment; filename="{export.filename}"'
+        )
+        response.write("\ufeff")
+        writer = csv.DictWriter(response, fieldnames=export.fieldnames)
+        writer.writeheader()
+        writer.writerows(export.rows)
+        return response
 
     def paper_ballot_view(self, request, object_id):
         election = get_object_or_404(
@@ -721,6 +757,14 @@ class ElectionAdmin(admin.ModelAdmin):
                     "result_summary"
                 ] = self.build_result_summary(
                     election
+                )
+                extra_context["result_csv_available"] = (
+                    election.phase == Election.Phase.FINAL
+                    and election.status == Election.Status.COUNTED
+                    and not LotteryDraw.objects.filter(
+                        election=election,
+                        executed_at__isnull=True,
+                    ).exists()
                 )
 
         return super().changeform_view(
