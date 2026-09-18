@@ -102,6 +102,26 @@ class CandidateAdminTest(SimpleTestCase):
         self.assertTrue(field.editable)
         self.assertEqual(field.verbose_name, "抱負")
 
+    def test_manifesto_is_applicable_only_to_president_final(self):
+        cases = [
+            (Election.Office.PRESIDENT, Election.Phase.FINAL, True),
+            (Election.Office.PRESIDENT, Election.Phase.PRELIMINARY, False),
+            (Election.Office.REPRESENTATIVE, Election.Phase.FINAL, False),
+        ]
+        for office, phase, expected in cases:
+            with self.subTest(office=office, phase=phase):
+                candidate = Candidate(
+                    election=Election(office=office, phase=phase),
+                )
+                self.assertEqual(
+                    self.model_admin.is_manifesto_applicable(candidate),
+                    expected,
+                )
+
+        self.assertFalse(
+            self.model_admin.is_manifesto_applicable(None)
+        )
+
 
 class AdminModelOrderTest(SimpleTestCase):
 

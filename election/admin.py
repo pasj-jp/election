@@ -854,6 +854,22 @@ class CandidateAdmin(admin.ModelAdmin):
         "member__member_no",
     )
 
+    def is_manifesto_applicable(self, obj):
+        return bool(
+            obj
+            and obj.election.office == Election.Office.PRESIDENT
+            and obj.election.phase == Election.Phase.FINAL
+        )
+
+    def get_fields(self, request, obj=None):
+        fields = list(super().get_fields(request, obj))
+        if (
+            not self.is_manifesto_applicable(obj)
+            and "manifesto" in fields
+        ):
+            fields.remove("manifesto")
+        return fields
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
 
