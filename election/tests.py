@@ -495,6 +495,9 @@ class CountPreviewTest(TestCase):
                 })
                 self.assertIn("山田 太郎(推)", rendered)
                 self.assertIn("佐藤 太郎(立)", rendered)
+                if template_name == "election/ballot.html":
+                    self.assertIn("(立)：立候補", rendered)
+                    self.assertIn("(推)：予備選挙による推薦", rendered)
 
         self.high_vote.status = Candidate.Status.QUALIFIED
         self.high_vote.save(update_fields=["status"])
@@ -510,6 +513,7 @@ class CountPreviewTest(TestCase):
         })
         self.assertNotIn("(推)", rendered)
         self.assertNotIn("(立)", rendered)
+        self.assertNotIn("候補者区分の説明", rendered)
 
 
 class RepresentativeElectionRulesTest(TestCase):

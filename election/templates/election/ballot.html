@@ -19,6 +19,13 @@
         <p class="instruction">投票する候補者を1名選択してください。</p>
     {% endif %}
 
+    {% if show_candidate_route_labels %}
+        <div class="candidate-route-legend" role="note" aria-label="候補者区分の説明">
+            <span>(立)：立候補</span>
+            <span>(推)：予備選挙による推薦</span>
+        </div>
+    {% endif %}
+
     <form method="post" action="{% url 'election:ballot_confirm' %}">
         {% csrf_token %}
         <div class="action-bar">
