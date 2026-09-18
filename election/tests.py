@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .admin import CandidateAdmin, order_admin_models
+from .forms import ElectionAdminForm
 from .models import (
     Ballot,
     BallotChoice,
@@ -595,3 +596,67 @@ class RepresentativeElectionRulesTest(TestCase):
         self.assertEqual(preview["threshold"], 3)
         self.assertEqual(preview["qualified"], [candidate])
         self.assertEqual(preview["final"], final)
+
+
+class ElectionAdminFormTest(TestCase):
+
+    def setUp(self):
+        self.cycle = ElectionCycle.objects.create(
+            year=2031,
+            name="2031年度選挙",
+        )
+        self.now = timezone.now()
+
+    def make_form(self, election_type):
+        return ElectionAdminForm(data={
+            "cycle": self.cycle.pk,
+            "election_type": election_type,
+            "phase": Election.Phase.PRELIMINARY,
+            "status": Election.Status.DRAFT,
+            "start_at": self.now.strftime("%Y-%m-%d %H:%M:%S"),
+            "end_at": (
+                self.now + timedelta(days=1)
+            ).strftime("%Y-%m-%d %H:%M:%S"),
+        })
+
+    def test_three_election_types_are_mapped_to_internal_fields(self):
+        cases = [
+            (
+                ElectionAdminForm.ElectionType.PRESIDENT,
+                Election.Office.PRESIDENT,
+                "",
+            ),
+            (
+                ElectionAdminForm.ElectionType.REPRESENTATIVE_GENERAL,
+                Election.Office.REPRESENTATIVE,
+                Election.RepresentativeCategory.GENERAL,
+            ),
+            (
+                ElectionAdminForm.ElectionType.REPRESENTATIVE_CORPORATE,
+                Election.Office.REPRESENTATIVE,
+                Election.RepresentativeCategory.CORPORATE,
+            ),
+        ]
+        for election_type, office, category in cases:
+            with self.subTest(election_type=election_type):
+                form = self.make_form(election_type)
+                self.assertTrue(form.is_valid(), form.errors)
+                election = form.save(commit=False)
+                self.assertEqual(election.office, office)
+                self.assertEqual(
+                    election.representative_category,
+                    category,
+                )
+
+    def test_office_field_has_three_user_facing_choices(self):
+        labels = [
+            label
+            for value, label in ElectionAdminForm().fields[
+                "election_type"
+            ].choices
+        ]
+
+        self.assertEqual(
+            labels,
+            ["会長", "代議員（一般枠）", "代議員（企業枠）"],
+        )

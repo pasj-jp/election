@@ -9,7 +9,7 @@ from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
 
-from .forms import MemberCsvImportForm
+from .forms import ElectionAdminForm, MemberCsvImportForm
 from .models import (
     Ballot,
     Candidate,
@@ -85,6 +85,8 @@ class ElectionCycleAdmin(admin.ModelAdmin):
 @admin.register(Election)
 class ElectionAdmin(admin.ModelAdmin):
 
+    form = ElectionAdminForm
+
     change_form_template = (
         "admin/election/election/change_form.html"
     )
@@ -92,7 +94,6 @@ class ElectionAdmin(admin.ModelAdmin):
     list_display = (
         "cycle",
         "office_display",
-        "representative_category_display",
         "phase_display",
         "status_display",
         "start_at",
@@ -659,14 +660,12 @@ class ElectionAdmin(admin.ModelAdmin):
         ordering="office",
     )
     def office_display(self, obj):
-        return obj.get_office_display()
-
-    @admin.display(
-        description="代議員枠",
-        ordering="representative_category",
-    )
-    def representative_category_display(self, obj):
-        return obj.get_representative_category_display() or "—"
+        if obj.office == Election.Office.PRESIDENT:
+            return obj.get_office_display()
+        return (
+            f"{obj.get_office_display()}"
+            f"（{obj.get_representative_category_display()}）"
+        )
 
     @admin.display(
         description="区分",

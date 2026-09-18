@@ -1,6 +1,75 @@
 from django import forms
+from django.db import models
 
-from .models import ElectionCycle
+from .models import Election, ElectionCycle
+
+
+class ElectionAdminForm(forms.ModelForm):
+    class ElectionType(models.TextChoices):
+        PRESIDENT = "president", "会長"
+        REPRESENTATIVE_GENERAL = (
+            "representative_general",
+            "代議員（一般枠）",
+        )
+        REPRESENTATIVE_CORPORATE = (
+            "representative_corporate",
+            "代議員（企業枠）",
+        )
+
+    election_type = forms.ChoiceField(
+        label="Office",
+        choices=ElectionType.choices,
+    )
+
+    class Meta:
+        model = Election
+        fields = (
+            "cycle",
+            "election_type",
+            "phase",
+            "status",
+            "start_at",
+            "end_at",
+        )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.instance.pk:
+            return
+        if self.instance.office == Election.Office.PRESIDENT:
+            self.initial["election_type"] = self.ElectionType.PRESIDENT
+        elif (
+            self.instance.representative_category
+            == Election.RepresentativeCategory.GENERAL
+        ):
+            self.initial["election_type"] = (
+                self.ElectionType.REPRESENTATIVE_GENERAL
+            )
+        elif (
+            self.instance.representative_category
+            == Election.RepresentativeCategory.CORPORATE
+        ):
+            self.initial["election_type"] = (
+                self.ElectionType.REPRESENTATIVE_CORPORATE
+            )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        election_type = cleaned_data.get("election_type")
+        if election_type == self.ElectionType.PRESIDENT:
+            self.instance.office = Election.Office.PRESIDENT
+            self.instance.representative_category = ""
+        elif election_type == self.ElectionType.REPRESENTATIVE_GENERAL:
+            self.instance.office = Election.Office.REPRESENTATIVE
+            self.instance.representative_category = (
+                Election.RepresentativeCategory.GENERAL
+            )
+        elif election_type == self.ElectionType.REPRESENTATIVE_CORPORATE:
+            self.instance.office = Election.Office.REPRESENTATIVE
+            self.instance.representative_category = (
+                Election.RepresentativeCategory.CORPORATE
+            )
+        return cleaned_data
 
 
 class MemberCsvImportForm(forms.Form):
