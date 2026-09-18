@@ -51,6 +51,7 @@ class Command(BaseCommand):
             required=True,
             help="テストメール送信先",
         )
+        parser.add_argument("--category", choices=["general", "corporate"])
 
         parser.add_argument(
             "--base-url",
@@ -68,6 +69,9 @@ class Command(BaseCommand):
         year = options["cycle"]
         office = options["office"]
         phase = options["phase"]
+        category = options["category"] or ""
+        if office == Election.Office.REPRESENTATIVE and not category:
+            raise CommandError("代議員選挙では--categoryを指定してください。")
         recipient = options["to"]
         base_url = options["base_url"]
         dry_run = options["dry_run"]
@@ -94,6 +98,7 @@ class Command(BaseCommand):
                 cycle=cycle,
                 office=office,
                 phase=phase,
+                representative_category=category,
             )
         except Election.DoesNotExist:
             raise CommandError(

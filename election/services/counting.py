@@ -8,12 +8,15 @@ from election.models import (
     Election,
     LotteryCandidate,
     LotteryDraw,
-    MemberSnapshot,
 )
 
 
 GENERAL_SEATS = 25
 CORPORATE_SEATS = 5
+REPRESENTATIVE_SEATS = {
+    Election.RepresentativeCategory.GENERAL: GENERAL_SEATS,
+    Election.RepresentativeCategory.CORPORATE: CORPORATE_SEATS,
+}
 NOMINATION_THRESHOLDS = {
     Election.Office.REPRESENTATIVE: 3,
     Election.Office.PRESIDENT: 10,
@@ -30,11 +33,16 @@ def preview_preliminary_count(election):
         raise ValidationError("投票終了後に開票してください。")
 
     try:
-        final = Election.objects.get(
-            cycle=election.cycle,
-            office=election.office,
-            phase=Election.Phase.FINAL,
-        )
+        final_filters = {
+            "cycle": election.cycle,
+            "office": election.office,
+            "phase": Election.Phase.FINAL,
+        }
+        if election.office == Election.Office.REPRESENTATIVE:
+            final_filters["representative_category"] = (
+                election.representative_category
+            )
+        final = Election.objects.get(**final_filters)
     except Election.DoesNotExist as exc:
         raise ValidationError("対応する本選挙が存在しません。") from exc
 
@@ -223,7 +231,6 @@ def commit_election_count(election):
 
 def get_representative_final_candidates(
     election,
-    category,
 ):
     """
     代議員本選挙の候補者を得票数付きで取得する。
@@ -233,7 +240,9 @@ def get_representative_final_candidates(
         Candidate.objects
         .filter(
             election=election,
-            member__representative_category=category,
+            member__representative_category=(
+                election.representative_category
+            ),
             status__in=[
                 Candidate.Status.QUALIFIED,
                 Candidate.Status.ACCEPTED,
@@ -261,7 +270,6 @@ def get_representative_final_candidates(
 
 def calculate_category_result(
     election,
-    category,
     seats,
 ):
     """
@@ -278,12 +286,11 @@ def calculate_category_result(
 
     candidates = get_representative_final_candidates(
         election,
-        category,
     )
 
     if not candidates:
         return {
-            "category": category,
+            "category": election.representative_category,
             "seats": seats,
             "candidates": [],
             "winners": [],
@@ -299,7 +306,7 @@ def calculate_category_result(
     #
     if len(candidates) <= seats:
         return {
-            "category": category,
+            "category": election.representative_category,
             "seats": seats,
             "candidates": candidates,
             "winners": candidates,
@@ -349,7 +356,7 @@ def calculate_category_result(
         tied = []
 
     return {
-        "category": category,
+        "category": election.representative_category,
         "seats": seats,
         "candidates": candidates,
         "winners": winners,
@@ -379,6 +386,9 @@ def preview_representative_final_count(
             "代議員本選挙ではありません。"
         )
 
+    if election.representative_category not in REPRESENTATIVE_SEATS:
+        raise ValidationError("代議員枠が設定されていません。")
+
     if election.status not in [
         Election.Status.CLOSED,
         Election.Status.COUNTED,
@@ -401,16 +411,9 @@ def preview_representative_final_count(
             "抽選実行済みのため、再開票できません。"
         )
 
-    general = calculate_category_result(
+    result = calculate_category_result(
         election,
-        MemberSnapshot.RepresentativeCategory.GENERAL,
-        GENERAL_SEATS,
-    )
-
-    corporate = calculate_category_result(
-        election,
-        MemberSnapshot.RepresentativeCategory.CORPORATE,
-        CORPORATE_SEATS,
+        REPRESENTATIVE_SEATS[election.representative_category],
     )
 
     return {
@@ -420,8 +423,7 @@ def preview_representative_final_count(
             .filter(election=election)
             .count()
         ),
-        "general": general,
-        "corporate": corporate,
+        "result": result,
         "can_confirm": election.status == Election.Status.CLOSED,
     }
 
@@ -446,6 +448,8 @@ def commit_representative_final_count(
     preview = preview_representative_final_count(
         election
     )
+    if not preview["can_confirm"]:
+        raise ValidationError("投票終了後の選挙だけ開票を確定できます。")
 
     #
     # 未実行の旧LotteryDrawがあれば消す
@@ -455,10 +459,7 @@ def commit_representative_final_count(
         executed_at__isnull=True,
     ).delete()
 
-    for result in [
-        preview["general"],
-        preview["corporate"],
-    ]:
+    for result in [preview["result"]]:
 
         for candidate in result["winners"]:
             candidate.status = (

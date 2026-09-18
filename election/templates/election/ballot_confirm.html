@@ -9,6 +9,9 @@
         <h1>{{ election.cycle.name }}</h1>
         <p class="election-type">
             <span>{{ election.get_office_display }}</span>
+            {% if election.representative_category %}
+                <span>{{ election.get_representative_category_display }}</span>
+            {% endif %}
             <span class="election-phase">{{ election.get_phase_display }}</span>
         </p>
     </header>

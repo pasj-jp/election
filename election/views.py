@@ -131,13 +131,11 @@ def validate_vote(election, candidate_ids):
     # 代議員
     #
     if election.office == Election.Office.REPRESENTATIVE:
-
         if len(candidate_ids) == 0:
             return "少なくとも1名を選択してください。"
-
-        if len(candidate_ids) > 10:
+        if len(candidate_ids) > election.vote_limit:
             return (
-                "代議員は最大10名まで"
+                f"代議員は最大{election.vote_limit}名まで"
                 "選択できます。"
             )
 
@@ -334,6 +332,7 @@ def ballot(request):
         {
             "election": election,
             "candidates": candidates,
+            "vote_limit": election.vote_limit,
             "selected_candidate_ids":
                 selected_candidate_ids,
         },

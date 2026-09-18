@@ -9,12 +9,15 @@
         <h1>{{ election.cycle.name }}</h1>
         <p class="election-type">
             <span>{{ election.get_office_display }}</span>
+            {% if election.representative_category %}
+                <span>{{ election.get_representative_category_display }}</span>
+            {% endif %}
             <span class="election-phase">{{ election.get_phase_display }}</span>
         </p>
     </header>
 
     {% if election.office == "representative" %}
-        <p class="instruction">本選挙に推薦する会員を最大10名まで選択してください。</p>
+        <p class="instruction">投票する候補者を最大{{ vote_limit }}名まで選択してください。</p>
     {% else %}
         <p class="instruction">投票する候補者を1名選択してください。</p>
     {% endif %}
@@ -24,7 +27,7 @@
         <div class="action-bar">
             <div class="selection-count">
                 選択人数: <strong id="selected-count">0</strong>
-                {% if election.office == "representative" %}/ 10{% endif %}
+                {% if election.office == "representative" %}/ {{ vote_limit }}{% endif %}
             </div>
             <button type="submit" class="primary-button">投票内容を確認</button>
         </div>
@@ -60,6 +63,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const choices = document.querySelectorAll(".candidate-checkbox");
     const counter = document.getElementById("selected-count");
     const isRepresentative = "{{ election.office|escapejs }}" === "representative";
+    const voteLimit = {{ vote_limit }};
 
     function updateSelection() {
         const checked = document.querySelectorAll(".candidate-checkbox:checked");
@@ -67,7 +71,7 @@ document.addEventListener("DOMContentLoaded", function () {
         choices.forEach(function (choice) {
             choice.closest(".candidate").classList.toggle("selected", choice.checked);
             if (isRepresentative) {
-                choice.disabled = checked.length >= 10 && !choice.checked;
+                choice.disabled = checked.length >= voteLimit && !choice.checked;
             }
         });
     }

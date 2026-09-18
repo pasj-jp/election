@@ -31,6 +31,11 @@ class Command(BaseCommand):
             "--output",
             help="CSV出力先。省略時は画面表示のみ",
         )
+        parser.add_argument(
+            "--category",
+            choices=["general", "corporate"],
+            required=True,
+        )
 
     def handle(self, *args, **options):
         year = options["cycle"]
@@ -50,6 +55,7 @@ class Command(BaseCommand):
                 cycle=cycle,
                 office=Election.Office.REPRESENTATIVE,
                 phase=Election.Phase.FINAL,
+                representative_category=options["category"],
             )
         except Election.DoesNotExist:
             raise CommandError(

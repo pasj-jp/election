@@ -56,15 +56,15 @@ ReleaseにはAnsibleが使用するソースアーカイブとSHA-256ファイ�
 ### 予備選挙
 
 * 選挙権: 正会員
-* 1人最大10名まで推薦可能
-* 企業枠・一般枠を合わせて最大10名
-* 3名以上から推薦された会員が本選挙候補者となる
+* 一般枠と企業枠を別々の選挙として実施
+* 一般枠は1人最大10名、企業枠は1人最大2名まで推薦可能
+* 各選挙で3票以上得票した会員が、それぞれの本選挙候補者となる
 
 ### 本選挙
 
 * 選挙権: 正会員
-* 1人最大10名まで投票可能
-* 企業枠・一般枠を合わせて最大10名
+* 一般枠と企業枠を別々の選挙として実施
+* 一般枠は1人最大25名、企業枠は1人最大5名まで投票可能
 
 定数:
 
@@ -83,6 +83,9 @@ ReleaseにはAnsibleが使用するソースアーカイブとSHA-256ファイ�
 それ以外は一般枠として扱います。
 
 定数境界で同票となった場合は、システム上で抽選を行います。
+
+したがって、各年度には会長・代議員（一般枠）・代議員（企業枠）の
+3種類について、それぞれ予備選挙と本選挙を作成します。
 
 ---
 
@@ -283,8 +286,12 @@ sudo -E -u election \
 sudo -E -u election \
   /opt/election/.venv/bin/python manage.py \
   generate_representative_candidates \
-  --cycle 2027
+  --cycle 2027 \
+  --category general
 ```
+
+企業枠は `--category corporate` を指定します。代議員選挙を対象とする
+ほかの管理コマンドでも、同様に `--category` の指定が必要です。
 
 ## 会長予備選挙
 
@@ -313,7 +320,8 @@ sudo -E -u election \
   generate_voters \
   --cycle 2027 \
   --office representative \
-  --phase preliminary
+  --phase preliminary \
+  --category general
 ```
 
 会長:
@@ -401,6 +409,7 @@ sudo -E -u election \
   --cycle 2027 \
   --office representative \
   --phase preliminary \
+  --category general \
   --base-url https://vote.pasj.jp/v/
 ```
 
@@ -709,6 +718,7 @@ sudo -E -u election \
   /opt/election/.venv/bin/python manage.py \
   count_representative_preliminary \
   --cycle 2027 \
+  --category general \
   --dry-run
 ```
 
@@ -718,7 +728,8 @@ sudo -E -u election \
 sudo -E -u election \
   /opt/election/.venv/bin/python manage.py \
   count_representative_preliminary \
-  --cycle 2027
+  --cycle 2027 \
+  --category general
 ```
 
 3票以上で本選挙進出です。
@@ -747,6 +758,7 @@ sudo -E -u election \
 ```text
 office = representative
 phase  = final
+representative_category = general または corporate
 status = closed
 ```
 
@@ -862,6 +874,7 @@ sudo -E -u election \
   /opt/election/.venv/bin/python manage.py \
   count_representative_final \
   --cycle 2027 \
+  --category general \
   --dry-run
 ```
 
@@ -871,7 +884,8 @@ sudo -E -u election \
 sudo -E -u election \
   /opt/election/.venv/bin/python manage.py \
   count_representative_final \
-  --cycle 2027
+  --cycle 2027 \
+  --category general
 ```
 
 ---
@@ -1040,18 +1054,19 @@ CUIとGUIで同一ロジックを使用します。
 
 Election詳細画面に開票結果を直接表示します。
 
-代議員本選挙:
+代議員本選挙（枠ごと）:
 
 ```text
 開票結果サマリー
 
-一般枠 25 / 25
-企業枠  5 / 5
+一般枠: 当選者 25名
 
-代議員30名が確定しています。
+または
+
+企業枠: 当選者 5名
 ```
 
-一般枠・企業枠の当選者について、
+各選挙の当選者について、
 
 * 会員番号
 * 氏名
@@ -1101,7 +1116,8 @@ KEK
 sudo -E -u election \
   /opt/election/.venv/bin/python manage.py \
   show_representative_results \
-  --cycle 2027
+  --cycle 2027 \
+  --category general
 ```
 
 CSV:
@@ -1111,6 +1127,7 @@ sudo -E -u election \
   /opt/election/.venv/bin/python manage.py \
   show_representative_results \
   --cycle 2027 \
+  --category general \
   --output /opt/election/results/representative-2027.csv
 ```
 

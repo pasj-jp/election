@@ -1,5 +1,6 @@
 import uuid
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
@@ -42,6 +43,10 @@ class Election(models.Model):
         CLOSED = "closed", "投票終了"
         COUNTED = "counted", "開票済"
 
+    class RepresentativeCategory(models.TextChoices):
+        GENERAL = "general", "一般枠"
+        CORPORATE = "corporate", "企業枠"
+
     cycle = models.ForeignKey(
         ElectionCycle,
         on_delete=models.PROTECT,
@@ -51,6 +56,14 @@ class Election(models.Model):
     office = models.CharField(
         max_length=20,
         choices=Office.choices,
+    )
+
+    representative_category = models.CharField(
+        max_length=20,
+        choices=RepresentativeCategory.choices,
+        blank=True,
+        default="",
+        verbose_name="代議員枠",
     )
 
     phase = models.CharField(
@@ -74,18 +87,53 @@ class Election(models.Model):
         verbose_name_plural = "選挙"
         constraints = [
             models.UniqueConstraint(
-                fields=["cycle", "office", "phase"],
-                name="unique_election_per_cycle_office_phase",
+                fields=[
+                    "cycle",
+                    "office",
+                    "phase",
+                    "representative_category",
+                ],
+                name="unique_election_per_cycle_office_phase_category",
             ),
         ]
-        ordering = ["cycle", "phase", "office"]
+        ordering = ["cycle", "phase", "office", "representative_category"]
+
+    def clean(self):
+        super().clean()
+        if self.office == self.Office.REPRESENTATIVE:
+            if not self.representative_category:
+                raise ValidationError({
+                    "representative_category": "代議員選挙では枠を選択してください。"
+                })
+        elif self.representative_category:
+            raise ValidationError({
+                "representative_category": "会長選挙では代議員枠を選択できません。"
+            })
 
     def __str__(self):
+        category = (
+            f"（{self.get_representative_category_display()}） "
+            if self.representative_category
+            else ""
+        )
         return (
             f"{self.cycle.year}年度 "
             f"{self.get_office_display()} "
+            f"{category}"
             f"{self.get_phase_display()}"
         )
+
+    @property
+    def vote_limit(self):
+        if self.office == self.Office.PRESIDENT:
+            return 1
+        limits = {
+            (self.Phase.PRELIMINARY, self.RepresentativeCategory.GENERAL): 10,
+            (self.Phase.PRELIMINARY, self.RepresentativeCategory.CORPORATE): 2,
+            (self.Phase.FINAL, self.RepresentativeCategory.GENERAL): 25,
+            (self.Phase.FINAL, self.RepresentativeCategory.CORPORATE): 5,
+        }
+        return limits.get((self.phase, self.representative_category), 0)
 
     @property
     def is_voting_open(self):
@@ -231,6 +279,19 @@ class Candidate(models.Model):
             f"{self.election}: "
             f"{self.member.last_name} {self.member.first_name}"
         )
+
+    def clean(self):
+        super().clean()
+        if (
+            self.election_id
+            and self.member_id
+            and self.election.office == Election.Office.REPRESENTATIVE
+            and self.election.representative_category
+            != self.member.representative_category
+        ):
+            raise ValidationError({
+                "member": "選挙の代議員枠と会員の所属枠が一致していません。"
+            })
 
 class VoterParticipation(models.Model):
     """

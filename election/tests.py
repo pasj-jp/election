@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.contrib import admin
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
@@ -19,6 +20,7 @@ from .models import (
     VoterParticipation,
 )
 from .services.counting import preview_election_count
+from .views import validate_vote
 
 
 CSV_HEADER = (
@@ -463,3 +465,133 @@ class CountPreviewTest(TestCase):
             args=[self.election.pk],
         ))
         self.assertContains(result_response, "抽選は実行済みです")
+
+
+class RepresentativeElectionRulesTest(TestCase):
+
+    def setUp(self):
+        self.cycle = ElectionCycle.objects.create(
+            year=2030,
+            name="2030年度選挙",
+        )
+        self.general_member = self.create_member(
+            "g001",
+            MemberSnapshot.RepresentativeCategory.GENERAL,
+        )
+        self.corporate_member = self.create_member(
+            "c001",
+            MemberSnapshot.RepresentativeCategory.CORPORATE,
+        )
+        self.now = timezone.now()
+
+    def create_member(self, number, category):
+        return MemberSnapshot.objects.create(
+            cycle=self.cycle,
+            member_no=number,
+            last_name="会員",
+            first_name=number,
+            email=f"{number}@example.com",
+            employee_type="正会員",
+            representative_category=category,
+            is_eligible_voter=True,
+        )
+
+    def create_election(self, phase, category, status=Election.Status.DRAFT):
+        return Election.objects.create(
+            cycle=self.cycle,
+            office=Election.Office.REPRESENTATIVE,
+            representative_category=category,
+            phase=phase,
+            status=status,
+            start_at=self.now,
+            end_at=self.now + timedelta(days=1),
+        )
+
+    def test_general_and_corporate_elections_can_exist_separately(self):
+        general = self.create_election(
+            Election.Phase.PRELIMINARY,
+            Election.RepresentativeCategory.GENERAL,
+        )
+        corporate = self.create_election(
+            Election.Phase.PRELIMINARY,
+            Election.RepresentativeCategory.CORPORATE,
+        )
+
+        self.assertEqual(general.candidates.count(), 1)
+        self.assertEqual(general.candidates.get().member, self.general_member)
+        self.assertEqual(corporate.candidates.count(), 1)
+        self.assertEqual(
+            corporate.candidates.get().member,
+            self.corporate_member,
+        )
+        self.assertEqual(general.voter_participations.count(), 2)
+        self.assertEqual(corporate.voter_participations.count(), 2)
+
+    def test_vote_limits_follow_category_and_phase(self):
+        cases = [
+            (Election.Phase.PRELIMINARY, Election.RepresentativeCategory.GENERAL, 10),
+            (Election.Phase.PRELIMINARY, Election.RepresentativeCategory.CORPORATE, 2),
+            (Election.Phase.FINAL, Election.RepresentativeCategory.GENERAL, 25),
+            (Election.Phase.FINAL, Election.RepresentativeCategory.CORPORATE, 5),
+        ]
+        for phase, category, limit in cases:
+            with self.subTest(phase=phase, category=category):
+                election = self.create_election(phase, category)
+                self.assertEqual(election.vote_limit, limit)
+                self.assertIsNone(validate_vote(election, list(range(limit))))
+                self.assertIn(
+                    f"最大{limit}名",
+                    validate_vote(election, list(range(limit + 1))),
+                )
+
+    def test_representative_election_requires_category(self):
+        election = Election(
+            cycle=self.cycle,
+            office=Election.Office.REPRESENTATIVE,
+            phase=Election.Phase.PRELIMINARY,
+            start_at=self.now,
+            end_at=self.now + timedelta(days=1),
+        )
+
+        with self.assertRaises(ValidationError):
+            election.full_clean()
+
+    def test_final_seat_count_depends_on_category(self):
+        for category, seats, member in (
+            (Election.RepresentativeCategory.GENERAL, 25, self.general_member),
+            (Election.RepresentativeCategory.CORPORATE, 5, self.corporate_member),
+        ):
+            with self.subTest(category=category):
+                election = self.create_election(
+                    Election.Phase.FINAL,
+                    category,
+                    status=Election.Status.CLOSED,
+                )
+                Candidate.objects.create(
+                    election=election,
+                    member=member,
+                    status=Candidate.Status.ACCEPTED,
+                )
+                preview = preview_election_count(election)
+                self.assertEqual(preview["result"]["seats"], seats)
+
+    def test_three_preliminary_votes_qualify_for_same_category_final(self):
+        preliminary = self.create_election(
+            Election.Phase.PRELIMINARY,
+            Election.RepresentativeCategory.GENERAL,
+            status=Election.Status.CLOSED,
+        )
+        final = self.create_election(
+            Election.Phase.FINAL,
+            Election.RepresentativeCategory.GENERAL,
+        )
+        candidate = preliminary.candidates.get()
+        for _ in range(3):
+            ballot = Ballot.objects.create(election=preliminary)
+            BallotChoice.objects.create(ballot=ballot, candidate=candidate)
+
+        preview = preview_election_count(preliminary)
+
+        self.assertEqual(preview["threshold"], 3)
+        self.assertEqual(preview["qualified"], [candidate])
+        self.assertEqual(preview["final"], final)

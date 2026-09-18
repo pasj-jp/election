@@ -24,6 +24,10 @@ class Command(BaseCommand):
             choices=["preliminary", "final"],
             required=True,
         )
+        parser.add_argument(
+            "--category",
+            choices=["general", "corporate"],
+        )
         parser.add_argument("--dry-run", action="store_true")
 
     def handle(self, *args, **options):
@@ -35,10 +39,14 @@ class Command(BaseCommand):
                 f"{year}年度のElectionCycleが存在しません。"
             ) from exc
         try:
+            category = options["category"] or ""
+            if options["office"] == Election.Office.REPRESENTATIVE and not category:
+                raise CommandError("代議員選挙では--categoryを指定してください。")
             election = Election.objects.get(
                 cycle=cycle,
                 office=options["office"],
                 phase=options["phase"],
+                representative_category=category,
             )
         except Election.DoesNotExist as exc:
             raise CommandError("指定したElectionが存在しません。") from exc

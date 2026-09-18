@@ -32,11 +32,16 @@ def generate_preliminary_candidates(election, *, save=True):
     if election.phase != Election.Phase.PRELIMINARY:
         raise ValueError("候補者を生成できるのは予備選挙だけです。")
 
+    member_filters = {
+        "cycle": election.cycle,
+        "is_eligible_voter": True,
+    }
+    if election.office == Election.Office.REPRESENTATIVE:
+        member_filters["representative_category"] = (
+            election.representative_category
+        )
     members = tuple(
-        MemberSnapshot.objects.filter(
-            cycle=election.cycle,
-            is_eligible_voter=True,
-        ).order_by("member_no")
+        MemberSnapshot.objects.filter(**member_filters).order_by("member_no")
     )
     created_count = 0
     existing_count = 0

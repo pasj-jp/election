@@ -92,6 +92,7 @@ class ElectionAdmin(admin.ModelAdmin):
     list_display = (
         "cycle",
         "office_display",
+        "representative_category_display",
         "phase_display",
         "status_display",
         "start_at",
@@ -107,6 +108,7 @@ class ElectionAdmin(admin.ModelAdmin):
     list_filter = (
         "cycle",
         "office",
+        "representative_category",
         "phase",
         "status",
     )
@@ -115,6 +117,7 @@ class ElectionAdmin(admin.ModelAdmin):
         "-cycle__year",
         "phase",
         "office",
+        "representative_category",
     )
 
     def response_add(self, request, obj, post_url_continue=None):
@@ -303,6 +306,7 @@ class ElectionAdmin(admin.ModelAdmin):
                 cycle=election.cycle.year,
                 office=election.office,
                 phase=election.phase,
+                category=election.representative_category or None,
                 base_url=base_url,
                 stdout=StringIO(),
                 stderr=StringIO(),
@@ -414,14 +418,7 @@ class ElectionAdmin(admin.ModelAdmin):
 
         lottery_count = 0
         if preview["kind"] == "representative_final":
-            lottery_count = sum(
-                1
-                for result in [
-                    preview["general"],
-                    preview["corporate"],
-                ]
-                if result["lottery_required"]
-            )
+            lottery_count = int(preview["result"]["lottery_required"])
 
         if (
             preview["kind"] == "president_final"
@@ -663,6 +660,13 @@ class ElectionAdmin(admin.ModelAdmin):
     )
     def office_display(self, obj):
         return obj.get_office_display()
+
+    @admin.display(
+        description="代議員枠",
+        ordering="representative_category",
+    )
+    def representative_category_display(self, obj):
+        return obj.get_representative_category_display() or "—"
 
     @admin.display(
         description="区分",
