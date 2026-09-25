@@ -39,30 +39,32 @@ def home(request):
 
 @staff_member_required(login_url="admin:login")
 def management_cycle_list(request):
-    cycles = accessible_cycles(request.user).annotate(
-        election_count=Count("elections", distinct=True),
-        member_count=Count("members", distinct=True),
-        voted_count=Count(
-            "elections__voter_participations",
-            filter=Q(elections__voter_participations__voted_at__isnull=False),
-            distinct=True,
-        ),
-    )
+    cycles = list(accessible_cycles(request.user))
+    # Keep independent one-to-many relations out of the same aggregate JOIN.
+    for cycle in cycles:
+        cycle.election_count = cycle.elections.count()
+        cycle.member_count = cycle.members.count()
+        cycle.voted_count = VoterParticipation.objects.filter(
+            election__cycle=cycle, voted_at__isnull=False,
+        ).count()
     return render(request, "election/management/cycle_list.html", {"cycles": cycles})
 
 
 @staff_member_required(login_url="admin:login")
 def management_cycle_detail(request, cycle_year):
     cycle = get_object_or_404(accessible_cycles(request.user), year=cycle_year)
-    elections = list(cycle.elections.annotate(
-        voter_count=Count("voter_participations", distinct=True),
-        email_sent_count=Count("voter_participations", filter=Q(
-            voter_participations__email_sent_at__isnull=False), distinct=True),
-        voted_count=Count("voter_participations", filter=Q(
-            voter_participations__voted_at__isnull=False), distinct=True),
-        ballot_count=Count("ballots", distinct=True),
-        candidate_count=Count("candidates", distinct=True),
-    ))
+    elections = list(cycle.elections.all())
+    for election in elections:
+        participation_stats = election.voter_participations.aggregate(
+            voter_count=Count("pk"),
+            email_sent_count=Count("pk", filter=Q(email_sent_at__isnull=False)),
+            voted_count=Count("pk", filter=Q(voted_at__isnull=False)),
+        )
+        election.voter_count = participation_stats["voter_count"]
+        election.email_sent_count = participation_stats["email_sent_count"]
+        election.voted_count = participation_stats["voted_count"]
+        election.ballot_count = election.ballots.count()
+        election.candidate_count = election.candidates.count()
     office_order = {
         (Election.Office.PRESIDENT, ""): 0,
         (

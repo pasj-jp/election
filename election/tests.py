@@ -9,7 +9,9 @@ from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.core.management.base import CommandError
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from django.test import SimpleTestCase, TestCase
+from django.test.utils import CaptureQueriesContext
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
@@ -92,6 +94,78 @@ class ManagementCycleViewTest(TestCase):
         )
         self.assertEqual(response.url, "/management/2040/")
         self.assertEqual(cycle.elections.count(), 6)
+
+    def test_management_counts_without_multiplying_related_rows(self):
+        cycle = ElectionCycle.objects.create(year=2040, name="集計対象")
+        empty_cycle = ElectionCycle.objects.create(year=2041, name="空の年度")
+        hidden_cycle = ElectionCycle.objects.create(year=2042, name="担当外")
+        groups = [Group.objects.create(name=f"集計担当{i}") for i in range(2)]
+        self.user.is_superuser = False
+        self.user.save(update_fields=["is_superuser"])
+        self.user.groups.add(*groups)
+        cycle.manager_groups.add(*groups)
+        empty_cycle.manager_groups.add(*groups)
+        elections = [
+            Election.objects.create(
+                cycle=cycle, office="president", phase=phase,
+                start_at=self.now, end_at=self.now + timedelta(days=7),
+            )
+            for phase in ("preliminary", "final")
+        ]
+        empty_election = Election.objects.create(
+            cycle=cycle, office="representative",
+            representative_category="general", phase="preliminary",
+            start_at=self.now, end_at=self.now + timedelta(days=7),
+        )
+        for i in range(3):
+            member = MemberSnapshot.objects.create(
+                cycle=cycle, member_no=str(i), last_name="集計", first_name=str(i),
+            )
+            for election in elections:
+                VoterParticipation.objects.create(
+                    election=election, member=member,
+                    voted_at=self.now if i == 0 else None,
+                    email_sent_at=self.now if i < 2 else None,
+                )
+                Candidate.objects.create(election=election, member=member)
+        for election in elections:
+            Ballot.objects.bulk_create([Ballot(election=election) for _ in range(2)])
+
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(reverse("election:management_cycle_list"))
+            detail = self.client.get(reverse(
+                "election:management_cycle_detail", args=[cycle.year],
+            ))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(detail.status_code, 200)
+        cycles = {item.pk: item for item in response.context["cycles"]}
+        self.assertEqual(set(cycles), {cycle.pk, empty_cycle.pk})
+        self.assertNotIn(hidden_cycle.pk, cycles)
+        for pk, expected in ((cycle.pk, (3, 3, 2)), (empty_cycle.pk, (0, 0, 0))):
+            item = cycles[pk]
+            self.assertEqual(
+                (item.election_count, item.member_count, item.voted_count), expected,
+            )
+        self.assertEqual(detail.context["member_count"], 3)
+        for item in detail.context["elections"]:
+            expected = (0, 0, 0, 0, 0) if item.pk == empty_election.pk else (3, 2, 1, 2, 3)
+            self.assertEqual(
+                (item.voter_count, item.email_sent_count, item.voted_count,
+                 item.ballot_count, item.candidate_count), expected,
+            )
+            self.assertAlmostEqual(item.turnout, 0 if item.pk == empty_election.pk else 100 / 3)
+
+        # A correct COUNT(DISTINCT) can still hide a costly cross product.
+        # Check the query structure instead of relying on timing on tiny fixtures.
+        independent_tables = [
+            model._meta.db_table
+            for model in (MemberSnapshot, VoterParticipation, Ballot, Candidate)
+        ]
+        for query in queries:
+            self.assertLessEqual(
+                sum(f'"{table}"' in query["sql"] for table in independent_tables),
+                1, query["sql"],
+            )
 
     def test_detail_only_shows_selected_cycle_elections(self):
         cycle = ElectionCycle.objects.create(
