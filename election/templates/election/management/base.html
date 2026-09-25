@@ -1,4 +1,4 @@
 {% load static %}
 <!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{% block title %}年度別選挙管理{% endblock %}</title><link rel="stylesheet" href="{% static 'election/management.css' %}"></head>
-<body><header class="site-header"><a class="brand" href="{% url 'election:management_cycle_list' %}">年度別選挙管理</a><nav>{% if request.user.is_superuser %}<a href="{% url 'admin:index' %}">管理サイト</a>{% endif %}<form action="{% url 'admin:logout' %}" method="post">{% csrf_token %}<button>ログアウト</button></form></nav></header>
+<body><header class="site-header"><a class="brand" href="{% url 'election:management_cycle_list' %}">日本加速器学会 選挙システム</a><nav>{% if request.user.is_superuser %}<a href="{% url 'admin:index' %}">管理サイト</a>{% endif %}<form action="{% url 'admin:logout' %}" method="post">{% csrf_token %}<button>ログアウト</button></form></nav></header>
 <main class="page">{% for message in messages %}<div class="message {{ message.tags }}">{{ message }}</div>{% endfor %}{% block content %}{% endblock %}</main>{% block scripts %}{% endblock %}</body></html>
