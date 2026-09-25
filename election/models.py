@@ -1,5 +1,7 @@
 import uuid
 
+from django.conf import settings
+from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
@@ -12,6 +14,14 @@ class ElectionCycle(models.Model):
 
     year = models.PositiveIntegerField(unique=True)
     name = models.CharField(max_length=200)
+
+    manager_groups = models.ManyToManyField(
+        Group,
+        blank=True,
+        related_name="managed_election_cycles",
+        verbose_name="選挙管理委員グループ",
+        help_text="この年度を閲覧・編集できるグループを選択します。",
+    )
 
     preliminary_start_at = models.DateTimeField(
         null=True,
@@ -369,6 +379,23 @@ class Candidate(models.Model):
             raise ValidationError({
                 "member": "選挙の代議員枠と会員の所属枠が一致していません。"
             })
+
+class CandidateStatusChange(models.Model):
+    """選挙管理委員による候補者ステータス変更の監査履歴。"""
+    candidate = models.ForeignKey(Candidate, on_delete=models.PROTECT, related_name="status_changes", verbose_name="候補者")
+    previous_status = models.CharField(max_length=20, choices=Candidate.Status.choices, verbose_name="変更前")
+    new_status = models.CharField(max_length=20, choices=Candidate.Status.choices, verbose_name="変更後")
+    changed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="candidate_status_changes", verbose_name="変更者")
+    changed_at = models.DateTimeField(auto_now_add=True, verbose_name="変更日時")
+
+    class Meta:
+        verbose_name = "候補者ステータス変更履歴"
+        verbose_name_plural = "候補者ステータス変更履歴"
+        ordering = ["-changed_at"]
+
+    def __str__(self):
+        return f"{self.candidate}: {self.previous_status} → {self.new_status}"
+
 
 class VoterParticipation(models.Model):
     """

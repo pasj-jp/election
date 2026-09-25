@@ -20,6 +20,7 @@ from .forms import (
 from .models import (
     Ballot,
     Candidate,
+    CandidateStatusChange,
     Election,
     ElectionCycle,
     LotteryCandidate,
@@ -27,6 +28,8 @@ from .models import (
     MemberSnapshot,
     VoterParticipation,
 )
+
+from .permissions import accessible_cycles, can_access_cycle
 
 from .services.counting import (
     commit_election_count,
@@ -79,6 +82,29 @@ def get_ordered_app_list(request, app_label=None):
 admin.site.get_app_list = get_ordered_app_list
 
 
+class CycleScopedAdminMixin:
+    """担当年度に属するオブジェクトだけを管理サイトへ公開する。"""
+
+    cycle_lookup = "cycle"
+
+    def get_object_cycle(self, obj):
+        cycle = obj
+        for part in self.cycle_lookup.split("__"):
+            cycle = getattr(cycle, part)
+        return cycle
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(**{
+            f"{self.cycle_lookup}__in": accessible_cycles(request.user),
+        })
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+
 @admin.register(ElectionCycle)
 class ElectionCycleAdmin(admin.ModelAdmin):
     form = ElectionCycleAdminForm
@@ -99,6 +125,26 @@ class ElectionCycleAdmin(admin.ModelAdmin):
     ordering = (
         "-year",
     )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(
+            pk__in=accessible_cycles(request.user).values("pk")
+        )
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly = list(super().get_readonly_fields(request, obj))
+        if not request.user.is_superuser:
+            readonly.append("manager_groups")
+        return readonly
 
     def get_urls(self):
         custom_urls = [
@@ -245,6 +291,12 @@ class ElectionAdmin(admin.ModelAdmin):
         "representative_category",
     )
 
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
     def has_add_permission(self, request):
         return False
 
@@ -285,7 +337,9 @@ class ElectionAdmin(admin.ModelAdmin):
         return super().response_add(request, obj, post_url_continue)
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
+        qs = super().get_queryset(request).filter(
+            cycle__in=accessible_cycles(request.user)
+        )
 
         return qs.annotate(
             _voter_count=Count(
@@ -576,9 +630,11 @@ class ElectionAdmin(admin.ModelAdmin):
         object_id,
     ):
         election = get_object_or_404(
-            Election,
+            self.get_queryset(request),
             pk=object_id,
         )
+        if not self.has_change_permission(request, election):
+            raise PermissionDenied
 
         try:
             preview = preview_election_count(election)
@@ -620,9 +676,11 @@ class ElectionAdmin(admin.ModelAdmin):
         object_id,
     ):
         election = get_object_or_404(
-            Election,
+            self.get_queryset(request),
             pk=object_id,
         )
+        if not self.has_change_permission(request, election):
+            raise PermissionDenied
 
         if request.method != "POST":
             return redirect(
@@ -975,7 +1033,7 @@ class ElectionAdmin(admin.ModelAdmin):
 
 
 @admin.register(MemberSnapshot)
-class MemberSnapshotAdmin(admin.ModelAdmin):
+class MemberSnapshotAdmin(CycleScopedAdminMixin, admin.ModelAdmin):
 
     change_list_template = (
         "admin/election/membersnapshot/change_list.html"
@@ -1028,7 +1086,11 @@ class MemberSnapshotAdmin(admin.ModelAdmin):
             request.POST or None,
             request.FILES or None,
         )
+        form.fields["cycle"].queryset = accessible_cycles(request.user)
         if request.method == "POST" and form.is_valid():
+            cycle = form.cleaned_data["cycle"]
+            if not can_access_cycle(request.user, cycle):
+                raise PermissionDenied
             uploaded_file = form.cleaned_data["csv_file"]
             try:
                 result = import_members(
@@ -1064,7 +1126,8 @@ class MemberSnapshotAdmin(admin.ModelAdmin):
 
 
 @admin.register(Candidate)
-class CandidateAdmin(admin.ModelAdmin):
+class CandidateAdmin(CycleScopedAdminMixin, admin.ModelAdmin):
+    cycle_lookup = "election__cycle"
 
     list_display = (
         "election",
@@ -1148,8 +1211,32 @@ class CandidateAdmin(admin.ModelAdmin):
         return obj._vote_count
 
 
+@admin.register(CandidateStatusChange)
+class CandidateStatusChangeAdmin(admin.ModelAdmin):
+    list_display = (
+        "changed_at", "candidate", "previous_status", "new_status", "changed_by",
+    )
+    list_filter = ("candidate__election__cycle", "previous_status", "new_status")
+    readonly_fields = (
+        "candidate", "previous_status", "new_status", "changed_by", "changed_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+
 @admin.register(VoterParticipation)
-class VoterParticipationAdmin(admin.ModelAdmin):
+class VoterParticipationAdmin(CycleScopedAdminMixin, admin.ModelAdmin):
+    cycle_lookup = "election__cycle"
 
     actions = ("accept_as_paper_vote",)
 
@@ -1268,7 +1355,8 @@ class LotteryCandidateInline(admin.TabularInline):
 
 
 @admin.register(LotteryDraw)
-class LotteryDrawAdmin(admin.ModelAdmin):
+class LotteryDrawAdmin(CycleScopedAdminMixin, admin.ModelAdmin):
+    cycle_lookup = "election__cycle"
 
     change_form_template = (
         "admin/election/lotterydraw/change_form.html"
@@ -1333,9 +1421,11 @@ class LotteryDrawAdmin(admin.ModelAdmin):
         object_id,
     ):
         lottery = get_object_or_404(
-            LotteryDraw,
+            self.get_queryset(request),
             pk=object_id,
         )
+        if not self.has_change_permission(request, lottery):
+            raise PermissionDenied
 
         try:
             preview = preview_lottery(
@@ -1378,9 +1468,11 @@ class LotteryDrawAdmin(admin.ModelAdmin):
         object_id,
     ):
         lottery = get_object_or_404(
-            LotteryDraw,
+            self.get_queryset(request),
             pk=object_id,
         )
+        if not self.has_change_permission(request, lottery):
+            raise PermissionDenied
 
         if request.method != "POST":
             return redirect(

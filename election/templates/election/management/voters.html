@@ -1,0 +1,10 @@
+{% extends "election/management/base.html" %}
+{% block title %}有権者管理{% endblock %}
+{% block content %}
+<p><a href="{% url 'election:management_cycle_detail' cycle.pk %}">← {{ cycle.year }}年度</a></p>
+<div class="title-row"><div><h1>有権者管理</h1><p>{{ election }}</p></div><span class="status status-{{ election.status }}">{{ election.get_status_display }}</span></div>
+<p class="warning">設定するとこの選挙では投票済みとなり、電子投票と投票メール送信の対象から外れます。実際に書面投票を受け付けた後に設定してください。</p>
+<form class="voter-filter single" method="get"><label>会員検索<input type="search" name="q" value="{{ query }}" placeholder="会員番号・氏名・メール"></label><button class="button" type="submit">検索</button></form>
+<div class="section-heading"><div><h2>{{ election.election_type_display }}・{{ election.get_phase_display }}</h2><p>最大200件を表示しています。</p></div></div>
+<form method="post">{% csrf_token %}<input type="hidden" name="q" value="{{ query }}"><div class="table-wrap"><table class="result-table"><thead><tr><th>選択</th><th>会員番号</th><th>氏名</th><th>メール</th><th>投票状況</th><th>投票方法</th></tr></thead><tbody>{% for voter in voters %}<tr><td>{% if election.status == 'open' and not voter.voted_at %}<input type="checkbox" name="voters" value="{{ voter.pk }}" aria-label="{{ voter.member }}を選択">{% else %}—{% endif %}</td><td>{{ voter.member.member_no }}</td><td>{{ voter.member.last_name }} {{ voter.member.first_name }}</td><td>{{ voter.member.email }}</td><td>{% if voter.voted_at %}投票済み{% else %}未投票{% endif %}</td><td>{{ voter.get_voting_method_display|default:"—" }}</td></tr>{% empty %}<tr><td colspan="6">該当する有権者はいません。</td></tr>{% endfor %}</tbody></table></div>{% if election.status == 'open' %}<div class="sticky-actions"><button class="button primary" type="submit">選択した有権者を書面投票受付済みにする</button></div>{% else %}<p class="warning">書面投票受付を設定できるのは、選挙状態が「投票受付中」の間だけです。</p>{% endif %}</form>
+{% endblock %}

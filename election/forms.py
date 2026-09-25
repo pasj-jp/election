@@ -21,6 +21,32 @@ class ElectionCycleAdminForm(forms.ModelForm):
             self.fields[field_name].required = True
 
 
+class ElectionCycleManagementForm(ElectionCycleAdminForm):
+    """年度別管理画面で使用する選挙年度フォーム。"""
+
+    class Meta(ElectionCycleAdminForm.Meta):
+        fields = (
+            "year", "name",
+            "preliminary_start_at", "preliminary_end_at",
+            "final_start_at", "final_end_at",
+        )
+        widgets = {
+            field_name: forms.DateTimeInput(
+                attrs={"type": "datetime-local"},
+                format="%Y-%m-%dT%H:%M",
+            )
+            for field_name in (
+                "preliminary_start_at", "preliminary_end_at",
+                "final_start_at", "final_end_at",
+            )
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field_name in self.Meta.widgets:
+            self.fields[field_name].input_formats = ["%Y-%m-%dT%H:%M"]
+
+
 class ElectionAdminForm(forms.ModelForm):
     class ElectionType(models.TextChoices):
         PRESIDENT = "president", "会長"

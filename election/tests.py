@@ -4,6 +4,7 @@ from io import StringIO
 
 from django.contrib import admin
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.core.management.base import CommandError
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -19,13 +20,14 @@ from .models import (
     Ballot,
     BallotChoice,
     Candidate,
+    CandidateStatusChange,
     Election,
     ElectionCycle,
     LotteryDraw,
     MemberSnapshot,
     VoterParticipation,
 )
-from .services.counting import preview_election_count
+from .services.counting import commit_election_count, preview_election_count
 from .services.cycle_setup import setup_cycle
 from .services.paper_voting import accept_paper_votes, create_paper_ballot
 from .views import (
@@ -53,7 +55,362 @@ class HomeViewTest(SimpleTestCase):
         )
         self.assertContains(
             response,
-            reverse("admin:index"),
+            reverse("election:management_cycle_list"),
+        )
+        self.assertNotContains(response, reverse("admin:index"))
+
+
+class ManagementCycleViewTest(TestCase):
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="manager", email="manager@example.com", password="password"
+        )
+        self.client.force_login(self.user)
+        self.now = timezone.now().replace(microsecond=0)
+
+    def test_anonymous_user_is_redirected_to_admin_login(self):
+        self.client.logout()
+        response = self.client.get(reverse("election:management_cycle_list"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("admin:login"), response.url)
+
+    def test_creating_cycle_builds_six_elections(self):
+        response = self.client.post(reverse("election:management_cycle_create"), {
+            "year": 2040,
+            "name": "2040年度選挙",
+            "preliminary_start_at": "2040-01-01T09:00",
+            "preliminary_end_at": "2040-01-08T09:00",
+            "final_start_at": "2040-02-01T09:00",
+            "final_end_at": "2040-02-08T09:00",
+        })
+        cycle = ElectionCycle.objects.get(year=2040)
+        self.assertRedirects(
+            response,
+            reverse("election:management_cycle_detail", args=[cycle.pk]),
+        )
+        self.assertEqual(cycle.elections.count(), 6)
+
+    def test_detail_only_shows_selected_cycle_elections(self):
+        cycle = ElectionCycle.objects.create(
+            year=2041, name="2041年度選挙",
+            preliminary_start_at=self.now,
+            preliminary_end_at=self.now + timedelta(days=7),
+            final_start_at=self.now + timedelta(days=14),
+            final_end_at=self.now + timedelta(days=21),
+        )
+        other = ElectionCycle.objects.create(
+            year=2042, name="別年度の選挙",
+            preliminary_start_at=self.now,
+            preliminary_end_at=self.now + timedelta(days=7),
+            final_start_at=self.now + timedelta(days=14),
+            final_end_at=self.now + timedelta(days=21),
+        )
+        setup_cycle(cycle)
+        setup_cycle(other)
+        response = self.client.get(
+            reverse("election:management_cycle_detail", args=[cycle.pk])
+        )
+        self.assertContains(response, "2041年度選挙")
+        self.assertNotContains(response, "別年度の選挙")
+        self.assertEqual(len(response.context["elections"]), 6)
+
+    def test_manager_can_only_see_assigned_cycle(self):
+        manager = get_user_model().objects.create_user(
+            username="limited-manager", password="password", is_staff=True
+        )
+        assigned_group = Group.objects.create(name="2044年度選挙管理委員")
+        manager.groups.add(assigned_group)
+        assigned = ElectionCycle.objects.create(
+            year=2044, name="担当年度",
+            preliminary_start_at=self.now,
+            preliminary_end_at=self.now + timedelta(days=7),
+            final_start_at=self.now + timedelta(days=14),
+            final_end_at=self.now + timedelta(days=21),
+        )
+        assigned.manager_groups.add(assigned_group)
+        hidden = ElectionCycle.objects.create(
+            year=2045, name="担当外年度",
+            preliminary_start_at=self.now,
+            preliminary_end_at=self.now + timedelta(days=7),
+            final_start_at=self.now + timedelta(days=14),
+            final_end_at=self.now + timedelta(days=21),
+        )
+        setup_cycle(assigned)
+        setup_cycle(hidden)
+        self.client.force_login(manager)
+
+        response = self.client.get(reverse("election:management_cycle_list"))
+        self.assertContains(response, "担当年度")
+        self.assertNotContains(response, "担当外年度")
+        self.assertNotContains(response, "新しい年度を作成")
+        detail = self.client.get(reverse(
+            "election:management_cycle_detail", args=[assigned.pk]
+        ))
+        assigned_election = assigned.elections.first()
+        email_url = reverse(
+            "election:management_email_preview",
+            args=[assigned.pk, assigned_election.pk],
+        )
+        count_url = reverse(
+            "election:management_count_preview",
+            args=[assigned.pk, assigned_election.pk],
+        )
+        paper_url = reverse(
+            "election:management_paper_ballot",
+            args=[assigned.pk, assigned_election.pk],
+        )
+        self.assertNotContains(detail, email_url)
+        self.assertNotContains(detail, count_url)
+        self.assertNotContains(detail, paper_url)
+        self.assertNotContains(detail, "会員リスト取込")
+        self.assertContains(detail, reverse(
+            "election:management_voters", args=[assigned.pk, assigned_election.pk]
+        ))
+        assigned_election.status = Election.Status.OPEN
+        assigned_election.start_at = self.now - timedelta(days=1)
+        assigned_election.end_at = self.now + timedelta(days=1)
+        assigned_election.save(update_fields=["status", "start_at", "end_at"])
+        open_detail = self.client.get(reverse(
+            "election:management_cycle_detail", args=[assigned.pk]
+        ))
+        self.assertContains(open_detail, email_url)
+        self.assertContains(open_detail, paper_url)
+        self.assertNotContains(open_detail, count_url)
+        self.assertEqual(self.client.get(paper_url).status_code, 200)
+        self.assertEqual(self.client.get(email_url).status_code, 200)
+        assigned_election.status = Election.Status.CLOSED
+        assigned_election.save(update_fields=["status"])
+        closed_detail = self.client.get(reverse(
+            "election:management_cycle_detail", args=[assigned.pk]
+        ))
+        self.assertContains(closed_detail, count_url)
+        self.assertNotContains(closed_detail, email_url)
+        self.assertNotContains(closed_detail, paper_url)
+        assigned_election.status = Election.Status.COUNTED
+        assigned_election.save(update_fields=["status"])
+        counted_detail = self.client.get(reverse(
+            "election:management_cycle_detail", args=[assigned.pk]
+        ))
+        self.assertContains(counted_detail, "選挙結果")
+        self.assertContains(counted_detail, count_url)
+        self.assertEqual(
+            self.client.get(reverse(
+                "admin:election_election_change", args=[assigned_election.pk]
+            )).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.get(reverse(
+                "admin:election_electioncycle_import_members", args=[assigned.pk]
+            )).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.get(reverse(
+                "election:management_cycle_detail", args=[hidden.pk]
+            )).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.get(reverse("election:management_cycle_create")).status_code,
+            403,
+        )
+        hidden_election = hidden.elections.first()
+        response = self.client.post(
+            reverse("election:management_election_status", args=[
+                hidden.pk, hidden_election.pk,
+            ]),
+            {"status": Election.Status.OPEN},
+        )
+        self.assertEqual(response.status_code, 403)
+        hidden_election.refresh_from_db()
+        self.assertEqual(hidden_election.status, Election.Status.DRAFT)
+
+    def test_superuser_can_see_unassigned_cycles(self):
+        cycle = ElectionCycle.objects.create(year=2046, name="未割当年度")
+        response = self.client.get(reverse("election:management_cycle_list"))
+        self.assertContains(response, cycle.name)
+        self.assertContains(response, "新しい年度を作成")
+        detail = self.client.get(reverse(
+            "election:management_cycle_detail", args=[cycle.pk]
+        ))
+        self.assertContains(detail, "data-open-cycle-dialog")
+        self.assertContains(detail, reverse(
+            "election:management_cycle_edit", args=[cycle.pk]
+        ))
+        self.assertNotContains(detail, "会員リスト取込")
+
+    def test_voter_management_marks_scoped_voter_as_paper(self):
+        manager = get_user_model().objects.create_user(
+            username="paper-manager", password="password", is_staff=True
+        )
+        group = Group.objects.create(name="2048年度選挙管理委員")
+        manager.groups.add(group)
+        cycle = ElectionCycle.objects.create(
+            year=2048, name="2048年度選挙",
+            preliminary_start_at=self.now,
+            preliminary_end_at=self.now + timedelta(days=7),
+            final_start_at=self.now + timedelta(days=14),
+            final_end_at=self.now + timedelta(days=21),
+        )
+        cycle.manager_groups.add(group)
+        member = MemberSnapshot.objects.create(
+            cycle=cycle, member_no="v001", last_name="書面", first_name="希望",
+            email="paper-choice@example.com", employee_type="正会員",
+            representative_category=MemberSnapshot.RepresentativeCategory.GENERAL,
+            is_eligible_voter=True,
+        )
+        setup_cycle(cycle)
+        election = cycle.elections.filter(
+            phase=Election.Phase.PRELIMINARY,
+            office=Election.Office.PRESIDENT,
+        ).get()
+        election.status = Election.Status.OPEN
+        election.save(update_fields=["status"])
+        voter = VoterParticipation.objects.get(election=election, member=member)
+        self.client.force_login(manager)
+        response = self.client.post(
+            reverse("election:management_voters", args=[cycle.pk, election.pk]),
+            {"voters": [voter.pk]},
+        )
+        voter.refresh_from_db()
+        self.assertIsNotNone(voter.voted_at)
+        self.assertEqual(voter.voting_method, VoterParticipation.VotingMethod.PAPER)
+        self.assertRedirects(
+            response,
+            reverse(
+                "election:management_voters", args=[cycle.pk, election.pk]
+            ),
+        )
+
+        other_election = cycle.elections.exclude(pk=election.pk).first()
+        other_voter = VoterParticipation.objects.get(
+            election=other_election, member=member
+        )
+        response = self.client.post(
+            reverse("election:management_voters", args=[cycle.pk, election.pk]),
+            {"voters": [other_voter.pk]},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_candidate_roster_rules_and_manual_add_routes(self):
+        manager = get_user_model().objects.create_user(
+            username="candidate-manager", password="password", is_staff=True
+        )
+        group = Group.objects.create(name="2047年度選挙管理委員")
+        manager.groups.add(group)
+        cycle = ElectionCycle.objects.create(
+            year=2047, name="2047年度選挙",
+            preliminary_start_at=self.now,
+            preliminary_end_at=self.now + timedelta(days=7),
+            final_start_at=self.now + timedelta(days=14),
+            final_end_at=self.now + timedelta(days=21),
+        )
+        cycle.manager_groups.add(group)
+        general = MemberSnapshot.objects.create(
+            cycle=cycle, member_no="c001", last_name="候補", first_name="太郎",
+            email="candidate@example.com", employee_type="正会員",
+            representative_category=MemberSnapshot.RepresentativeCategory.GENERAL,
+            is_eligible_voter=True,
+        )
+        self_candidate = MemberSnapshot.objects.create(
+            cycle=cycle, member_no="c002", last_name="立候補", first_name="花子",
+            email="self@example.com", employee_type="正会員",
+            representative_category=MemberSnapshot.RepresentativeCategory.GENERAL,
+            is_eligible_voter=True,
+        )
+        corporate = MemberSnapshot.objects.create(
+            cycle=cycle, member_no="c003", last_name="企業", first_name="次郎",
+            email="corporate@example.com", employee_type="正会員",
+            representative_category=MemberSnapshot.RepresentativeCategory.CORPORATE,
+            is_eligible_voter=True,
+        )
+        setup_cycle(cycle)
+        preliminary = cycle.elections.get(
+            office=Election.Office.REPRESENTATIVE,
+            phase=Election.Phase.PRELIMINARY,
+            representative_category=Election.RepresentativeCategory.GENERAL,
+        )
+        preliminary_candidate = Candidate.objects.get(
+            election=preliminary, member=general
+        )
+        self.client.force_login(manager)
+        status_url = reverse("election:management_candidate_status", args=[
+            cycle.pk, preliminary.pk, preliminary_candidate.pk,
+        ])
+
+        self.client.post(status_url, {"status": Candidate.Status.QUALIFIED})
+        preliminary_candidate.refresh_from_db()
+        self.assertEqual(preliminary_candidate.status, Candidate.Status.ELIGIBLE)
+        self.assertFalse(
+            CandidateStatusChange.objects.filter(candidate=preliminary_candidate).exists()
+        )
+
+        final = cycle.elections.get(
+            office=Election.Office.REPRESENTATIVE,
+            phase=Election.Phase.FINAL,
+            representative_category=Election.RepresentativeCategory.GENERAL,
+        )
+        add_url = lambda member: reverse(
+            "election:management_candidate_add",
+            args=[cycle.pk, final.pk, member.pk],
+        )
+        self.client.post(add_url(general), {"route": "qualified"})
+        corrected = Candidate.objects.get(election=final, member=general)
+        self.assertEqual(corrected.status, Candidate.Status.QUALIFIED)
+        addition = CandidateStatusChange.objects.get(
+            candidate=corrected,
+            previous_status=Candidate.Status.QUALIFIED,
+            new_status=Candidate.Status.QUALIFIED,
+        )
+        self.assertEqual(addition.changed_by, manager)
+
+        self.client.post(add_url(self_candidate), {"route": "accepted"})
+        accepted = Candidate.objects.get(election=final, member=self_candidate)
+        self.assertEqual(accepted.status, Candidate.Status.ACCEPTED)
+
+        self.client.post(add_url(general), {"route": "accepted"})
+        self.assertEqual(Candidate.objects.filter(election=final, member=general).count(), 1)
+        self.client.post(add_url(corporate), {"route": "accepted"})
+        self.assertFalse(Candidate.objects.filter(election=final, member=corporate).exists())
+
+        self.client.post(reverse(
+            "election:management_candidate_remove",
+            args=[cycle.pk, final.pk, corrected.pk],
+        ))
+        corrected.refresh_from_db()
+        self.assertEqual(corrected.status, Candidate.Status.DISQUALIFIED)
+        change = CandidateStatusChange.objects.get(
+            candidate=corrected,
+            new_status=Candidate.Status.DISQUALIFIED,
+        )
+        self.assertEqual(change.previous_status, Candidate.Status.QUALIFIED)
+        self.assertEqual(change.new_status, Candidate.Status.DISQUALIFIED)
+        self.assertEqual(change.changed_by, manager)
+
+    def test_status_can_be_updated_from_cycle_dashboard(self):
+        cycle = ElectionCycle.objects.create(
+            year=2043, name="2043年度選挙",
+            preliminary_start_at=self.now,
+            preliminary_end_at=self.now + timedelta(days=7),
+            final_start_at=self.now + timedelta(days=14),
+            final_end_at=self.now + timedelta(days=21),
+        )
+        setup_cycle(cycle)
+        election = cycle.elections.first()
+        response = self.client.post(
+            reverse(
+                "election:management_election_status",
+                args=[cycle.pk, election.pk],
+            ),
+            {"status": Election.Status.OPEN},
+        )
+        election.refresh_from_db()
+        self.assertEqual(election.status, Election.Status.OPEN)
+        self.assertRedirects(
+            response,
+            reverse("election:management_cycle_detail", args=[cycle.pk]),
         )
 
 
@@ -1044,6 +1401,9 @@ class RepresentativeElectionRulesTest(TestCase):
         self.assertEqual(preview["threshold"], 3)
         self.assertEqual(preview["qualified"], [candidate])
         self.assertEqual(preview["final"], final)
+        commit_election_count(preliminary)
+        final_candidate = Candidate.objects.get(election=final, member=candidate.member)
+        self.assertEqual(final_candidate.status, Candidate.Status.QUALIFIED)
 
     def test_voter_screens_display_representative_category(self):
         election = self.create_election(
