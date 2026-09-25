@@ -1,1 +1,58 @@
-{% extends "election/management/base.html" %}{% block title %}投票メール送信{% endblock %}{% block content %}<p><a href="{% url 'election:management_cycle_detail' cycle.pk %}">← {{ cycle.year }}年度</a></p><div class="form-card"><h1>投票メール送信</h1><h2>{{ election }}</h2><dl class="summary-list"><div><dt>未送信の対象者</dt><dd>{{ target_count }}名</dd></div><div><dt>送信済み</dt><dd>{{ sent_count }}名</dd></div></dl>{% if existing_token_count %}<p class="warning">未送信者のうち{{ existing_token_count }}名に既存トークンがあるため、安全のため送信できません。</p>{% elif target_count %}<p>有権者ごとに固有の投票URLを生成して送信します。</p><form method="post" action="{% url 'election:management_email_send' cycle.pk election.pk %}">{% csrf_token %}<button class="button primary" type="submit">{{ target_count }}名にメールを送信</button></form>{% else %}<p>未送信の対象者はいません。</p>{% endif %}</div>{% endblock %}
+{% extends "election/management/base.html" %}
+{% block title %}投票メール送信{% endblock %}
+{% block content %}
+<p><a href="{% url 'election:management_cycle_detail' cycle.pk %}">← {{ cycle.year }}年度</a></p>
+<div class="form-card">
+    <h1>投票メール送信</h1>
+    <h2>{{ election }}</h2>
+    <dl class="summary-list">
+        <div><dt>未送信の対象者</dt><dd>{{ target_count }}名</dd></div>
+        <div><dt>送信済み</dt><dd>{{ sent_count }}名</dd></div>
+    </dl>
+    {% if send_disabled %}
+        <p class="warning">この選挙ではメールを送信済みです。再送信が必要な場合は、管理サイトから対象者を指定してください。</p>
+        <button class="button sent-button" type="button" disabled>送信済み</button>
+    {% elif existing_token_count %}
+        <p class="warning">未送信者のうち{{ existing_token_count }}名に既存トークンがあるため、安全のため送信できません。</p>
+    {% elif target_count %}
+        <p>有権者ごとに固有の投票URLを生成して送信します。</p>
+        <button class="button primary" type="button" data-open-email-dialog>{{ target_count }}名にメールを送信</button>
+    {% else %}
+        <p>未送信の対象者はいません。</p>
+    {% endif %}
+</div>
+{% if not send_disabled and not existing_token_count and target_count %}
+<dialog class="edit-dialog confirm-dialog" id="email-confirm-dialog" aria-labelledby="email-confirm-title">
+    <div class="dialog-heading">
+        <div>
+            <span class="phase">送信前の確認</span>
+            <h2 id="email-confirm-title">投票メールを送信しますか？</h2>
+        </div>
+        <button class="dialog-close" type="button" data-close-email-dialog aria-label="閉じる">×</button>
+    </div>
+    <form method="post" action="{% url 'election:management_email_send' cycle.pk election.pk %}">
+        {% csrf_token %}
+        <p class="confirm-message"><strong>{{ target_count }}人</strong>にメールを送信します。よろしいですか？</p>
+        <p class="confirm-note">送信を開始すると取り消せません。</p>
+        <div class="dialog-actions">
+            <button class="button" type="button" data-close-email-dialog>キャンセル</button>
+            <button class="button primary" type="submit">送信する</button>
+        </div>
+    </form>
+</dialog>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if not send_disabled and not existing_token_count and target_count %}
+<script>
+const emailDialog = document.querySelector("#email-confirm-dialog");
+document.querySelector("[data-open-email-dialog]").addEventListener("click", () => emailDialog.showModal());
+document.querySelectorAll("[data-close-email-dialog]").forEach((button) => {
+    button.addEventListener("click", () => emailDialog.close());
+});
+emailDialog.addEventListener("click", (event) => {
+    if (event.target === emailDialog) emailDialog.close();
+});
+</script>
+{% endif %}
+{% endblock %}

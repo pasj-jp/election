@@ -40,3 +40,39 @@
 .status-form select:focus,.inline-form select:focus,.voter-filter select:focus{outline:0;background-color:#fff;border-color:#78a69f;box-shadow:0 0 0 3px #136f6318}
 .status-form .button{min-width:58px;height:36px;padding:7px 10px;font-size:.82rem;line-height:1}
 .action-result{color:var(--ink);background:#f8fafb;border-color:var(--line)}
+
+.candidate-add .result-table th:nth-child(2),.candidate-add .result-table td:nth-child(2){min-width:9rem;white-space:nowrap}.candidate-add .result-table th:last-child,.candidate-add .result-table td:last-child{min-width:24rem}.candidate-actions{display:flex;align-items:stretch;gap:10px}.candidate-actions form{display:flex;flex:1;margin:0}.candidate-action-button{width:100%;min-height:42px;padding:9px 14px;border:1px solid #9fc9c3;border-radius:9px;background:linear-gradient(180deg,#fff,#edf7f5);color:#125f56;font:inherit;font-size:.88rem;font-weight:700;line-height:1.25;cursor:pointer;box-shadow:0 2px 5px #18304712;transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease,transform .15s ease}.candidate-action-button:hover{border-color:#5da99f;background:#e5f4f1;box-shadow:0 5px 12px #1830471c;transform:translateY(-1px)}.candidate-action-button:active{box-shadow:0 2px 5px #18304712;transform:none}.candidate-action-button:focus-visible{outline:3px solid #136f6330;outline-offset:2px}.candidate-action-button:disabled{opacity:.5;cursor:not-allowed;box-shadow:none;transform:none}@media(max-width:700px){.candidate-add .result-table th:last-child,.candidate-add .result-table td:last-child{min-width:15rem}.candidate-actions{flex-direction:column}}
+
+
+/* 管理画面の操作部品を共通のデザインシステムへ統一。 */
+:root{--button-radius:9px;--button-shadow:0 2px 6px #18304714;--button-shadow-hover:0 6px 16px #18304720;--primary-hover:#0f5f55;--danger:#a13b3b;--danger-bg:#fff7f7}
+.button,.candidate-action-button,.mini-action,.card-action,.icon-button{border-radius:var(--button-radius);font-weight:650;box-shadow:var(--button-shadow);transition:color .16s ease,background-color .16s ease,border-color .16s ease,box-shadow .16s ease,transform .16s ease}
+.button{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:9px 15px;border:1px solid #bfd0d4;background:linear-gradient(180deg,#fff,#f3f7f8);color:#274457;line-height:1.2}
+.button:hover{border-color:#8fabae;background:linear-gradient(180deg,#fff,#eaf2f3);color:#0c665c;box-shadow:var(--button-shadow-hover);transform:translateY(-1px)}
+.button:active{box-shadow:var(--button-shadow);transform:translateY(0)}
+.button.primary{border-color:var(--primary);background:linear-gradient(135deg,#177d70,var(--primary));color:#fff;box-shadow:0 3px 9px #136f6330}
+.button.primary:hover{border-color:var(--primary-hover);background:linear-gradient(135deg,#168071,var(--primary-hover));color:#fff;box-shadow:0 7px 17px #136f6338}
+.button.danger{border-color:#e4bcbc;background:var(--danger-bg);color:var(--danger);box-shadow:none}
+.button.danger:hover{border-color:#c97878;background:#fdeaea;color:#872929;box-shadow:0 5px 13px #a13b3b1c}
+.button:focus-visible,.candidate-action-button:focus-visible,.mini-action:focus-visible,.card-action:focus-visible,.icon-button:focus-visible,.site-header button:focus-visible,.dialog-close:focus-visible{outline:3px solid #136f6330;outline-offset:2px}
+.button:disabled,.candidate-action-button:disabled{opacity:.48;cursor:not-allowed;box-shadow:none;transform:none}
+.inline-form .button,.search-form .button,.voter-filter .button,.status-form .button{min-height:36px;height:36px;padding:7px 12px;font-size:.84rem}
+.status-form .button{min-width:58px;color:#fff;background:linear-gradient(135deg,#177d70,var(--primary));border-color:var(--primary);box-shadow:0 2px 7px #136f6328}
+.status-form .button:hover{color:#fff;background:linear-gradient(135deg,#168071,var(--primary-hover));border-color:var(--primary-hover);box-shadow:0 5px 12px #136f6330;transform:translateY(-1px)}
+.candidate-action-button{border-color:#b5cecb;background:linear-gradient(180deg,#fff,#edf7f5);color:#125f56;box-shadow:var(--button-shadow)}
+.candidate-action-button:hover{border-color:#6faea6;background:linear-gradient(180deg,#fff,#e3f2ef);color:#0d574f;box-shadow:var(--button-shadow-hover)}
+.card-action{min-height:38px;border-color:#c8d6db;background:linear-gradient(180deg,#fff,#f3f7f8);color:#274457;box-shadow:var(--button-shadow)}
+.card-action:hover{border-color:#91adaf;background:linear-gradient(180deg,#fff,#eaf2f3);color:#0c665c;box-shadow:var(--button-shadow-hover);transform:translateY(-1px)}
+.mini-action{display:inline-flex;align-items:center;justify-content:center;min-height:31px;padding:6px 10px;border-color:#bfd0d4;background:linear-gradient(180deg,#fff,#f3f7f8);font-weight:650;box-shadow:var(--button-shadow)}
+.mini-action:hover{border-color:#8fabae;background:#eaf2f3;box-shadow:var(--button-shadow-hover);transform:translateY(-1px)}
+.mini-action.primary{border-color:var(--primary);background:linear-gradient(135deg,#177d70,var(--primary));color:#fff}
+.icon-button{border-color:#bfd0d4;background:linear-gradient(180deg,#fff,#f3f7f8);box-shadow:var(--button-shadow)}
+.icon-button:hover{border-color:#8fabae;background:#eaf2f3;box-shadow:var(--button-shadow-hover);transform:translateY(-1px)}
+.site-header form button{min-height:34px;padding:6px 11px;border:1px solid transparent;border-radius:var(--button-radius);font-weight:650;transition:background-color .16s ease,border-color .16s ease}
+.site-header form button:hover{border-color:#c8d8d7;background:#eff6f5}
+.dialog-close{display:grid;place-items:center;width:38px;height:38px;border:1px solid transparent;border-radius:var(--button-radius);transition:color .16s ease,background-color .16s ease,border-color .16s ease}
+.dialog-close:hover{border-color:#d2dee2;background:#f1f5f6;color:#0c665c}
+
+.confirm-dialog{width:min(480px,92vw)}.confirm-message{margin:2px 0 8px;color:var(--ink);font-size:1.05rem}.confirm-message strong{color:var(--primary);font-size:1.35rem}.confirm-note{margin:0;color:var(--muted);font-size:.88rem}
+
+.sent-button,.sent-button:hover{border-color:#53636d;background:#53636d;color:#fff;box-shadow:none;transform:none}

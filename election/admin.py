@@ -1238,7 +1238,7 @@ class CandidateStatusChangeAdmin(admin.ModelAdmin):
 class VoterParticipationAdmin(CycleScopedAdminMixin, admin.ModelAdmin):
     cycle_lookup = "election__cycle"
 
-    actions = ("accept_as_paper_vote",)
+    actions = ("accept_as_paper_vote", "resend_voting_emails")
 
     list_display = (
         "member",
@@ -1298,6 +1298,42 @@ class VoterParticipationAdmin(CycleScopedAdminMixin, admin.ModelAdmin):
                 request,
                 f'{result["counted"]}名は開票済みの選挙のため変更していません。',
                 messages.WARNING,
+            )
+
+    @admin.action(description="選択した有権者へ投票メールを再送する")
+    def resend_voting_emails(self, request, queryset):
+        token_marker = "EMAIL_TOKEN_MARKER"
+        voting_url = request.build_absolute_uri(
+            reverse("election:vote_entry", args=[token_marker])
+        )
+        base_url = voting_url.replace(token_marker + "/", "")
+        sent_count = 0
+        for voter in queryset.select_related("election__cycle", "member"):
+            try:
+                call_command(
+                    "resend_voting_email",
+                    cycle=voter.election.cycle.year,
+                    office=voter.election.office,
+                    phase=voter.election.phase,
+                    category=voter.election.representative_category or None,
+                    member=voter.member.member_no,
+                    base_url=base_url,
+                    stdout=StringIO(),
+                    stderr=StringIO(),
+                )
+            except CommandError as exc:
+                self.message_user(
+                    request,
+                    f"{voter.member}: {exc}",
+                    level=messages.ERROR,
+                )
+            else:
+                sent_count += 1
+        if sent_count:
+            self.message_user(
+                request,
+                f"投票メールを{sent_count}名に再送しました。",
+                level=messages.SUCCESS,
             )
 
     @admin.display(

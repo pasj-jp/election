@@ -1,6 +1,7 @@
 import csv
 from datetime import timedelta
 from io import StringIO
+from unittest.mock import patch
 
 from django.contrib import admin
 from django.contrib.auth import get_user_model
@@ -114,6 +115,20 @@ class ManagementCycleViewTest(TestCase):
         self.assertContains(response, "2041年度選挙")
         self.assertNotContains(response, "別年度の選挙")
         self.assertEqual(len(response.context["elections"]), 6)
+        self.assertEqual(
+            [
+                (election.phase, election.office, election.representative_category)
+                for election in response.context["elections"]
+            ],
+            [
+                ("preliminary", "president", ""),
+                ("preliminary", "representative", "general"),
+                ("preliminary", "representative", "corporate"),
+                ("final", "president", ""),
+                ("final", "representative", "general"),
+                ("final", "representative", "corporate"),
+            ],
+        )
 
     def test_manager_can_only_see_assigned_cycle(self):
         manager = get_user_model().objects.create_user(
@@ -148,6 +163,18 @@ class ManagementCycleViewTest(TestCase):
             "election:management_cycle_detail", args=[assigned.pk]
         ))
         assigned_election = assigned.elections.first()
+        email_member = MemberSnapshot.objects.create(
+            cycle=assigned,
+            member_no="email001",
+            last_name="送信",
+            first_name="対象",
+            email="email-target@example.com",
+            employee_type="正会員",
+            is_eligible_voter=True,
+        )
+        email_voter = VoterParticipation.objects.create(
+            election=assigned_election, member=email_member
+        )
         email_url = reverse(
             "election:management_email_preview",
             args=[assigned.pk, assigned_election.pk],
@@ -178,7 +205,30 @@ class ManagementCycleViewTest(TestCase):
         self.assertContains(open_detail, paper_url)
         self.assertNotContains(open_detail, count_url)
         self.assertEqual(self.client.get(paper_url).status_code, 200)
-        self.assertEqual(self.client.get(email_url).status_code, 200)
+        email_preview = self.client.get(email_url)
+        self.assertEqual(email_preview.status_code, 200)
+        self.assertContains(email_preview, "にメールを送信します。よろしいですか？")
+        self.assertContains(email_preview, "data-open-email-dialog")
+        self.assertContains(email_preview, "data-close-email-dialog")
+        email_voter.email_sent_at = self.now
+        email_voter.email_send_attempts = 1
+        email_voter.save(
+            update_fields=["email_sent_at", "email_send_attempts"]
+        )
+        sent_preview = self.client.get(email_url)
+        self.assertContains(sent_preview, "送信済み")
+        self.assertContains(sent_preview, "sent-button")
+        self.assertNotContains(sent_preview, "data-open-email-dialog")
+        blocked_send = self.client.post(
+            reverse(
+                "election:management_email_send",
+                args=[assigned.pk, assigned_election.pk],
+            ),
+            follow=True,
+        )
+        self.assertContains(
+            blocked_send, "一括送信は再実行できません。"
+        )
         assigned_election.status = Election.Status.CLOSED
         assigned_election.save(update_fields=["status"])
         closed_detail = self.client.get(reverse(
@@ -320,6 +370,12 @@ class ManagementCycleViewTest(TestCase):
             representative_category=MemberSnapshot.RepresentativeCategory.GENERAL,
             is_eligible_voter=True,
         )
+        delegate_recommended = MemberSnapshot.objects.create(
+            cycle=cycle, member_no="c004", last_name="代議員", first_name="推薦",
+            email="delegate-recommended@example.com", employee_type="正会員",
+            representative_category=MemberSnapshot.RepresentativeCategory.GENERAL,
+            is_eligible_voter=True,
+        )
         corporate = MemberSnapshot.objects.create(
             cycle=cycle, member_no="c003", last_name="企業", first_name="次郎",
             email="corporate@example.com", employee_type="正会員",
@@ -356,19 +412,47 @@ class ManagementCycleViewTest(TestCase):
             "election:management_candidate_add",
             args=[cycle.pk, final.pk, member.pk],
         )
+        page = self.client.get(
+            reverse(
+                "election:management_candidates", args=[cycle.pk, final.pk]
+            ),
+            {"q": "候補"},
+        )
+        self.assertNotContains(page, "本選挙進出者として追加")
+        self.assertContains(page, "代議員推薦として追加")
+        self.assertContains(page, "立候補承諾として追加")
         self.client.post(add_url(general), {"route": "qualified"})
+        self.assertFalse(
+            Candidate.objects.filter(election=final, member=general).exists()
+        )
+
+        self.client.post(
+            add_url(general), {"route": "delegate_recommended"}
+        )
         corrected = Candidate.objects.get(election=final, member=general)
-        self.assertEqual(corrected.status, Candidate.Status.QUALIFIED)
+        self.assertEqual(
+            corrected.status, Candidate.Status.DELEGATE_RECOMMENDED
+        )
         addition = CandidateStatusChange.objects.get(
             candidate=corrected,
-            previous_status=Candidate.Status.QUALIFIED,
-            new_status=Candidate.Status.QUALIFIED,
+            previous_status=Candidate.Status.DELEGATE_RECOMMENDED,
+            new_status=Candidate.Status.DELEGATE_RECOMMENDED,
         )
         self.assertEqual(addition.changed_by, manager)
 
         self.client.post(add_url(self_candidate), {"route": "accepted"})
         accepted = Candidate.objects.get(election=final, member=self_candidate)
         self.assertEqual(accepted.status, Candidate.Status.ACCEPTED)
+
+        self.client.post(
+            add_url(delegate_recommended), {"route": "delegate_recommended"}
+        )
+        recommended = Candidate.objects.get(
+            election=final, member=delegate_recommended
+        )
+        self.assertEqual(
+            recommended.status, Candidate.Status.DELEGATE_RECOMMENDED
+        )
 
         self.client.post(add_url(general), {"route": "accepted"})
         self.assertEqual(Candidate.objects.filter(election=final, member=general).count(), 1)
@@ -385,7 +469,9 @@ class ManagementCycleViewTest(TestCase):
             candidate=corrected,
             new_status=Candidate.Status.DISQUALIFIED,
         )
-        self.assertEqual(change.previous_status, Candidate.Status.QUALIFIED)
+        self.assertEqual(
+            change.previous_status, Candidate.Status.DELEGATE_RECOMMENDED
+        )
         self.assertEqual(change.new_status, Candidate.Status.DISQUALIFIED)
         self.assertEqual(change.changed_by, manager)
 
@@ -521,6 +607,14 @@ class CandidateAdminTest(SimpleTestCase):
             Candidate.Status.ACCEPTED,
             get_valid_candidate_statuses(representative),
         )
+        self.assertIn(
+            Candidate.Status.DELEGATE_RECOMMENDED,
+            get_valid_candidate_statuses(president),
+        )
+        self.assertIn(
+            Candidate.Status.DELEGATE_RECOMMENDED,
+            get_valid_candidate_statuses(representative),
+        )
 
 
 class PaperVotingTest(TestCase):
@@ -601,6 +695,29 @@ class PaperVotingTest(TestCase):
         self.assertEqual(
             self.voter.voting_method,
             VoterParticipation.VotingMethod.PAPER,
+        )
+
+    @patch("election.admin.call_command")
+    def test_admin_can_resend_email_to_selected_voter(self, call_command_mock):
+        response = self.client.post(
+            reverse("admin:election_voterparticipation_changelist"),
+            {
+                "action": "resend_voting_emails",
+                "_selected_action": [self.voter.pk],
+            },
+            follow=True,
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "投票メールを1名に再送しました。")
+        call_command_mock.assert_called_once()
+        self.assertEqual(
+            call_command_mock.call_args.args[0], "resend_voting_email"
+        )
+        self.assertEqual(
+            call_command_mock.call_args.kwargs["member"],
+            self.member.member_no,
         )
 
     def test_paper_ballot_is_anonymous_and_marked_as_paper(self):

@@ -121,6 +121,7 @@ def preview_president_final_count(election):
             status__in=[
                 Candidate.Status.QUALIFIED,
                 Candidate.Status.ACCEPTED,
+                Candidate.Status.DELEGATE_RECOMMENDED,
                 Candidate.Status.ELECTED,
                 Candidate.Status.NOT_ELECTED,
                 Candidate.Status.LOTTERY,
@@ -246,6 +247,7 @@ def get_representative_final_candidates(
             status__in=[
                 Candidate.Status.QUALIFIED,
                 Candidate.Status.ACCEPTED,
+                Candidate.Status.DELEGATE_RECOMMENDED,
                 Candidate.Status.ELECTED,
                 Candidate.Status.LOTTERY,
                 Candidate.Status.NOT_ELECTED,

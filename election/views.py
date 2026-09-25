@@ -62,8 +62,22 @@ def management_cycle_detail(request, cycle_id):
             voter_participations__voted_at__isnull=False), distinct=True),
         ballot_count=Count("ballots", distinct=True),
         candidate_count=Count("candidates", distinct=True),
-    ).order_by("office", "representative_category"))
-    elections.sort(key=lambda item: item.phase != Election.Phase.PRELIMINARY)
+    ))
+    office_order = {
+        (Election.Office.PRESIDENT, ""): 0,
+        (
+            Election.Office.REPRESENTATIVE,
+            Election.RepresentativeCategory.GENERAL,
+        ): 1,
+        (
+            Election.Office.REPRESENTATIVE,
+            Election.RepresentativeCategory.CORPORATE,
+        ): 2,
+    }
+    elections.sort(key=lambda election: (
+        election.phase != Election.Phase.PRELIMINARY,
+        office_order[(election.office, election.representative_category)],
+    ))
     for election in elections:
         election.turnout = (
             election.voted_count / election.voter_count * 100
@@ -174,6 +188,7 @@ PRELIMINARY_MANUAL_CANDIDATE_STATUSES = (
 )
 FINAL_MANUAL_CANDIDATE_STATUSES = (
     Candidate.Status.ACCEPTED,
+    Candidate.Status.DELEGATE_RECOMMENDED,
     Candidate.Status.DECLINED,
     Candidate.Status.DISQUALIFIED,
 )
@@ -328,9 +343,9 @@ def management_candidate_add(request, cycle_id, election_id, member_id):
                 raise ValidationError("本人立候補を追加できるのは代議員本選挙だけです。")
             status = Candidate.Status.ACCEPTED
             route_label = "立候補者"
-        elif route == "qualified":
-            status = Candidate.Status.QUALIFIED
-            route_label = "本選挙進出者"
+        elif route == "delegate_recommended":
+            status = Candidate.Status.DELEGATE_RECOMMENDED
+            route_label = "代議員推薦者"
         else:
             raise ValidationError("追加方法の指定が正しくありません。")
         if Candidate.objects.filter(election=election, member=member).exists():
@@ -397,13 +412,18 @@ def management_email_preview(request, cycle_id, election_id):
     voters = election.voter_participations.filter(
         voted_at__isnull=True, email_sent_at__isnull=True,
     )
+    sent_count = election.voter_participations.filter(
+        email_sent_at__isnull=False
+    ).count()
+    send_disabled = election.voter_participations.filter(
+        email_send_attempts__gt=0
+    ).exists()
     return render(request, "election/management/email_preview.html", {
         "cycle": election.cycle, "election": election,
         "target_count": voters.count(),
         "existing_token_count": voters.filter(token_hash__isnull=False).count(),
-        "sent_count": election.voter_participations.filter(
-            email_sent_at__isnull=False
-        ).count(),
+        "sent_count": sent_count,
+        "send_disabled": send_disabled,
     })
 
 
@@ -414,6 +434,16 @@ def management_email_send(request, cycle_id, election_id):
     if not election.is_voting_open:
         messages.error(request, "投票期間中かつ「投票受付中」の選挙に限りメールを送信できます。")
         return redirect("election:management_cycle_detail", cycle_id=cycle_id)
+    if election.voter_participations.filter(email_send_attempts__gt=0).exists():
+        messages.error(
+            request,
+            "この選挙ではメールを送信済みです。一括送信は再実行できません。"
+        )
+        return redirect(
+            "election:management_email_preview",
+            cycle_id=cycle_id,
+            election_id=election_id,
+        )
     voters = election.voter_participations.filter(
         voted_at__isnull=True, email_sent_at__isnull=True,
     )
@@ -517,7 +547,10 @@ def get_valid_candidate_statuses(election):
     """
 
     if election.phase == Election.Phase.FINAL:
-        statuses = [Candidate.Status.QUALIFIED]
+        statuses = [
+            Candidate.Status.QUALIFIED,
+            Candidate.Status.DELEGATE_RECOMMENDED,
+        ]
         if election.office == Election.Office.REPRESENTATIVE:
             statuses.append(Candidate.Status.ACCEPTED)
         return statuses
@@ -530,10 +563,12 @@ def get_valid_candidate_statuses(election):
 def should_show_candidate_route_labels(election):
     return (
         election.phase == Election.Phase.FINAL
-        and election.office == Election.Office.REPRESENTATIVE
         and Candidate.objects.filter(
             election=election,
-            status=Candidate.Status.ACCEPTED,
+            status__in=[
+                Candidate.Status.ACCEPTED,
+                Candidate.Status.DELEGATE_RECOMMENDED,
+            ],
         ).exists()
     )
 

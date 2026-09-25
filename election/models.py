@@ -300,6 +300,7 @@ class Candidate(models.Model):
         ELIGIBLE = "eligible", "被選挙人"
         QUALIFIED = "qualified", "本選挙進出"
         ACCEPTED = "accepted", "立候補承諾"
+        DELEGATE_RECOMMENDED = "delegate_recommended", "代議員推薦"
         DECLINED = "declined", "辞退"
         DISQUALIFIED = "disqualified", "資格なし"
 
@@ -353,6 +354,7 @@ class Candidate(models.Model):
         labels = {
             self.Status.QUALIFIED: "(推)",
             self.Status.ACCEPTED: "(立)",
+            self.Status.DELEGATE_RECOMMENDED: "(代)",
         }
         return labels.get(self.status, "")
 
