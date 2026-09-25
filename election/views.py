@@ -52,8 +52,8 @@ def management_cycle_list(request):
 
 
 @staff_member_required(login_url="admin:login")
-def management_cycle_detail(request, cycle_id):
-    cycle = get_object_or_404(accessible_cycles(request.user), pk=cycle_id)
+def management_cycle_detail(request, cycle_year):
+    cycle = get_object_or_404(accessible_cycles(request.user), year=cycle_year)
     elections = list(cycle.elections.annotate(
         voter_count=Count("voter_participations", distinct=True),
         email_sent_count=Count("voter_participations", filter=Q(
@@ -96,12 +96,12 @@ def management_cycle_detail(request, cycle_id):
 
 
 @staff_member_required(login_url="admin:login")
-def management_cycle_form(request, cycle_id=None):
+def management_cycle_form(request, cycle_year=None):
     from .forms import ElectionCycleManagementForm
 
     if not request.user.is_superuser:
         raise PermissionDenied("選挙年度を設定できるのはスーパーユーザーだけです。")
-    cycle = get_object_or_404(ElectionCycle, pk=cycle_id) if cycle_id else None
+    cycle = get_object_or_404(ElectionCycle, year=cycle_year) if cycle_year else None
     form = ElectionCycleManagementForm(request.POST or None, instance=cycle)
     if request.method == "POST" and form.is_valid():
         cycle = form.save()
@@ -111,7 +111,7 @@ def management_cycle_form(request, cycle_id=None):
             f"{cycle.year}年度を保存しました。選挙{result.created_elections}件を追加し、"
             f"既存{result.existing_elections}件を同期しました。",
         )
-        return redirect("election:management_cycle_detail", cycle_id=cycle.pk)
+        return redirect("election:management_cycle_detail", cycle_year=cycle.year)
     return render(request, "election/management/cycle_form.html", {
         "form": form, "cycle": cycle,
     })
@@ -119,11 +119,11 @@ def management_cycle_form(request, cycle_id=None):
 
 @staff_member_required(login_url="admin:login")
 @require_POST
-def management_election_status(request, cycle_id, election_id):
+def management_election_status(request, cycle_year, election_id):
     election = get_object_or_404(
         Election.objects.select_related("cycle"),
         pk=election_id,
-        cycle_id=cycle_id,
+        cycle__year=cycle_year,
     )
     require_cycle_access(request.user, election.cycle)
     status = request.POST.get("status")
@@ -133,16 +133,16 @@ def management_election_status(request, cycle_id, election_id):
         election.status = status
         election.save(update_fields=["status"])
         messages.success(request, f"{election}の状態を更新しました。")
-    return redirect("election:management_cycle_detail", cycle_id=cycle_id)
+    return redirect("election:management_cycle_detail", cycle_year=cycle_year)
 
 
 
 
 @staff_member_required(login_url="admin:login")
-def management_voters(request, cycle_id, election_id):
+def management_voters(request, cycle_year, election_id):
     from .services.paper_voting import accept_paper_votes
 
-    election = get_management_election(request, cycle_id, election_id)
+    election = get_management_election(request, cycle_year, election_id)
     cycle = election.cycle
     if request.method == "POST":
         if election.status != Election.Status.OPEN:
@@ -160,7 +160,7 @@ def management_voters(request, cycle_id, election_id):
             if result["already_voted"]:
                 messages.warning(request, f'{result["already_voted"]}名は投票済みのため変更していません。')
         query = request.POST.get("q", "").strip()
-        url = reverse("election:management_voters", args=[cycle.pk, election.pk])
+        url = reverse("election:management_voters", args=[cycle.year, election.pk])
         return redirect(f"{url}?q={query}" if query else url)
 
     query = request.GET.get("q", "").strip()
@@ -219,19 +219,19 @@ def ensure_final_election(election):
         raise ValidationError("本選挙候補者を追加・除外できるのは本選挙だけです。")
 
 
-def get_management_election(request, cycle_id, election_id):
+def get_management_election(request, cycle_year, election_id):
     election = get_object_or_404(
         Election.objects.select_related("cycle"),
         pk=election_id,
-        cycle_id=cycle_id,
+        cycle__year=cycle_year,
     )
     require_cycle_access(request.user, election.cycle)
     return election
 
 
 @staff_member_required(login_url="admin:login")
-def management_candidates(request, cycle_id, election_id):
-    election = get_management_election(request, cycle_id, election_id)
+def management_candidates(request, cycle_year, election_id):
+    election = get_management_election(request, cycle_year, election_id)
     candidates = election.candidates.select_related("member").order_by(
         "member__member_no"
     )
@@ -276,8 +276,8 @@ def management_candidates(request, cycle_id, election_id):
 
 @staff_member_required(login_url="admin:login")
 @require_POST
-def management_candidate_status(request, cycle_id, election_id, candidate_id):
-    election = get_management_election(request, cycle_id, election_id)
+def management_candidate_status(request, cycle_year, election_id, candidate_id):
+    election = get_management_election(request, cycle_year, election_id)
     candidate = get_object_or_404(
         Candidate.objects.select_related("member", "election"),
         pk=candidate_id,
@@ -320,13 +320,13 @@ def management_candidate_status(request, cycle_id, election_id, candidate_id):
                     request,
                     f"{candidate.member.last_name} {candidate.member.first_name}さんの状態を更新しました。",
                 )
-    return redirect("election:management_candidates", cycle_id=cycle_id, election_id=election_id)
+    return redirect("election:management_candidates", cycle_year=cycle_year, election_id=election_id)
 
 
 @staff_member_required(login_url="admin:login")
 @require_POST
-def management_candidate_add(request, cycle_id, election_id, member_id):
-    election = get_management_election(request, cycle_id, election_id)
+def management_candidate_add(request, cycle_year, election_id, member_id):
+    election = get_management_election(request, cycle_year, election_id)
     member = get_object_or_404(MemberSnapshot, pk=member_id, cycle=election.cycle)
     route = request.POST.get("route")
     try:
@@ -368,14 +368,14 @@ def management_candidate_add(request, cycle_id, election_id, member_id):
             f"{member.last_name} {member.first_name}さんを{route_label}として追加しました。",
         )
     query = request.POST.get("q", "").strip()
-    url = reverse("election:management_candidates", args=[cycle_id, election_id])
+    url = reverse("election:management_candidates", args=[cycle_year, election_id])
     return redirect(f"{url}?q={query}" if query else url)
 
 
 @staff_member_required(login_url="admin:login")
 @require_POST
-def management_candidate_remove(request, cycle_id, election_id, candidate_id):
-    election = get_management_election(request, cycle_id, election_id)
+def management_candidate_remove(request, cycle_year, election_id, candidate_id):
+    election = get_management_election(request, cycle_year, election_id)
     candidate = get_object_or_404(
         Candidate.objects.select_related("member"), pk=candidate_id, election=election
     )
@@ -400,15 +400,15 @@ def management_candidate_remove(request, cycle_id, election_id, candidate_id):
                     changed_by=request.user,
                 )
             messages.success(request, f"{candidate.member}を本選挙候補者から除外しました。")
-    return redirect("election:management_candidates", cycle_id=cycle_id, election_id=election_id)
+    return redirect("election:management_candidates", cycle_year=cycle_year, election_id=election_id)
 
 
 @staff_member_required(login_url="admin:login")
-def management_email_preview(request, cycle_id, election_id):
-    election = get_management_election(request, cycle_id, election_id)
+def management_email_preview(request, cycle_year, election_id):
+    election = get_management_election(request, cycle_year, election_id)
     if not election.is_voting_open:
         messages.error(request, "投票期間中かつ「投票受付中」の選挙に限りメールを送信できます。")
-        return redirect("election:management_cycle_detail", cycle_id=cycle_id)
+        return redirect("election:management_cycle_detail", cycle_year=cycle_year)
     voters = election.voter_participations.filter(
         voted_at__isnull=True, email_sent_at__isnull=True,
     )
@@ -429,11 +429,11 @@ def management_email_preview(request, cycle_id, election_id):
 
 @staff_member_required(login_url="admin:login")
 @require_POST
-def management_email_send(request, cycle_id, election_id):
-    election = get_management_election(request, cycle_id, election_id)
+def management_email_send(request, cycle_year, election_id):
+    election = get_management_election(request, cycle_year, election_id)
     if not election.is_voting_open:
         messages.error(request, "投票期間中かつ「投票受付中」の選挙に限りメールを送信できます。")
-        return redirect("election:management_cycle_detail", cycle_id=cycle_id)
+        return redirect("election:management_cycle_detail", cycle_year=cycle_year)
     if election.voter_participations.filter(email_send_attempts__gt=0).exists():
         messages.error(
             request,
@@ -441,7 +441,7 @@ def management_email_send(request, cycle_id, election_id):
         )
         return redirect(
             "election:management_email_preview",
-            cycle_id=cycle_id,
+            cycle_year=cycle_year,
             election_id=election_id,
         )
     voters = election.voter_participations.filter(
@@ -449,7 +449,7 @@ def management_email_send(request, cycle_id, election_id):
     )
     if voters.filter(token_hash__isnull=False).exists():
         messages.error(request, "既存トークンがある未送信者がいるため送信できません。")
-        return redirect("election:management_email_preview", cycle_id=cycle_id, election_id=election_id)
+        return redirect("election:management_email_preview", cycle_year=cycle_year, election_id=election_id)
     marker = "EMAIL_TOKEN_MARKER"
     voting_url = request.build_absolute_uri(reverse("election:vote_entry", args=[marker]))
     before = election.voter_participations.filter(email_sent_at__isnull=False).count()
@@ -469,17 +469,17 @@ def management_email_send(request, cycle_id, election_id):
         sent = after - before
         level = messages.SUCCESS if sent == target_count else messages.WARNING
         messages.add_message(request, level, f"投票メールを{sent}件送信しました。未送信は{target_count - sent}件です。")
-    return redirect("election:management_cycle_detail", cycle_id=cycle_id)
+    return redirect("election:management_cycle_detail", cycle_year=cycle_year)
 
 
 @staff_member_required(login_url="admin:login")
-def management_count_preview(request, cycle_id, election_id):
-    election = get_management_election(request, cycle_id, election_id)
+def management_count_preview(request, cycle_year, election_id):
+    election = get_management_election(request, cycle_year, election_id)
     try:
         preview = preview_election_count(election)
     except ValidationError as exc:
         messages.error(request, str(exc))
-        return redirect("election:management_cycle_detail", cycle_id=cycle_id)
+        return redirect("election:management_cycle_detail", cycle_year=cycle_year)
     return render(request, "election/management/count_preview.html", {
         "cycle": election.cycle, "election": election, "preview": preview,
     })
@@ -487,13 +487,13 @@ def management_count_preview(request, cycle_id, election_id):
 
 @staff_member_required(login_url="admin:login")
 @require_POST
-def management_count_confirm(request, cycle_id, election_id):
-    election = get_management_election(request, cycle_id, election_id)
+def management_count_confirm(request, cycle_year, election_id):
+    election = get_management_election(request, cycle_year, election_id)
     try:
         preview = commit_election_count(election)
     except ValidationError as exc:
         messages.error(request, str(exc))
-        return redirect("election:management_cycle_detail", cycle_id=cycle_id)
+        return redirect("election:management_cycle_detail", cycle_year=cycle_year)
     needs_lottery = (
         preview.get("lottery_required", False)
         if preview["kind"] != "representative_final"
@@ -503,18 +503,18 @@ def management_count_confirm(request, cycle_id, election_id):
         request, messages.WARNING if needs_lottery else messages.SUCCESS,
         "開票を確定しました。" + ("抽選が必要です。" if needs_lottery else ""),
     )
-    return redirect("election:management_cycle_detail", cycle_id=cycle_id)
+    return redirect("election:management_cycle_detail", cycle_year=cycle_year)
 
 
 @staff_member_required(login_url="admin:login")
-def management_paper_ballot(request, cycle_id, election_id):
+def management_paper_ballot(request, cycle_year, election_id):
     from .forms import PaperBallotForm
     from .services.paper_voting import create_paper_ballot
 
-    election = get_management_election(request, cycle_id, election_id)
+    election = get_management_election(request, cycle_year, election_id)
     if election.status != Election.Status.OPEN:
         messages.error(request, "書面票を入力できるのは「投票受付中」の選挙だけです。")
-        return redirect("election:management_cycle_detail", cycle_id=cycle_id)
+        return redirect("election:management_cycle_detail", cycle_year=cycle_year)
     form = PaperBallotForm(request.POST or None, election=election)
     if request.method == "POST" and form.is_valid():
         try:
@@ -523,7 +523,7 @@ def management_paper_ballot(request, cycle_id, election_id):
             form.add_error(None, exc)
         else:
             messages.success(request, "書面票を匿名票として1票登録しました。")
-            return redirect("election:management_paper_ballot", cycle_id=cycle_id, election_id=election_id)
+            return redirect("election:management_paper_ballot", cycle_year=cycle_year, election_id=election_id)
     return render(request, "election/management/paper_ballot.html", {
         "cycle": election.cycle, "election": election, "form": form,
         "paper_ballot_count": election.ballots.filter(voting_method="paper").count(),

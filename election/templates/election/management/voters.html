@@ -1,7 +1,7 @@
 {% extends "election/management/base.html" %}
 {% block title %}有権者管理{% endblock %}
 {% block content %}
-<p><a href="{% url 'election:management_cycle_detail' cycle.pk %}">← {{ cycle.year }}年度</a></p>
+<p><a href="{% url 'election:management_cycle_detail' cycle.year %}">← {{ cycle.year }}年度</a></p>
 <div class="title-row"><div><h1>有権者管理</h1><p>{{ election }}</p></div><span class="status status-{{ election.status }}">{{ election.get_status_display }}</span></div>
 <p class="warning">設定するとこの選挙では投票済みとなり、電子投票と投票メール送信の対象から外れます。実際に書面投票を受け付けた後に設定してください。</p>
 <form class="voter-filter single" method="get"><label>会員検索<input type="search" name="q" value="{{ query }}" placeholder="会員番号・氏名・メール"></label><button class="button" type="submit">検索</button></form>

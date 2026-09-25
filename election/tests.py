@@ -88,8 +88,9 @@ class ManagementCycleViewTest(TestCase):
         cycle = ElectionCycle.objects.get(year=2040)
         self.assertRedirects(
             response,
-            reverse("election:management_cycle_detail", args=[cycle.pk]),
+            reverse("election:management_cycle_detail", args=[cycle.year]),
         )
+        self.assertEqual(response.url, "/management/2040/")
         self.assertEqual(cycle.elections.count(), 6)
 
     def test_detail_only_shows_selected_cycle_elections(self):
@@ -110,7 +111,7 @@ class ManagementCycleViewTest(TestCase):
         setup_cycle(cycle)
         setup_cycle(other)
         response = self.client.get(
-            reverse("election:management_cycle_detail", args=[cycle.pk])
+            reverse("election:management_cycle_detail", args=[cycle.year])
         )
         self.assertContains(response, "2041年度選挙")
         self.assertNotContains(response, "別年度の選挙")
@@ -160,7 +161,7 @@ class ManagementCycleViewTest(TestCase):
         self.assertNotContains(response, "担当外年度")
         self.assertNotContains(response, "新しい年度を作成")
         detail = self.client.get(reverse(
-            "election:management_cycle_detail", args=[assigned.pk]
+            "election:management_cycle_detail", args=[assigned.year]
         ))
         assigned_election = assigned.elections.first()
         email_member = MemberSnapshot.objects.create(
@@ -177,29 +178,29 @@ class ManagementCycleViewTest(TestCase):
         )
         email_url = reverse(
             "election:management_email_preview",
-            args=[assigned.pk, assigned_election.pk],
+            args=[assigned.year, assigned_election.pk],
         )
         count_url = reverse(
             "election:management_count_preview",
-            args=[assigned.pk, assigned_election.pk],
+            args=[assigned.year, assigned_election.pk],
         )
         paper_url = reverse(
             "election:management_paper_ballot",
-            args=[assigned.pk, assigned_election.pk],
+            args=[assigned.year, assigned_election.pk],
         )
         self.assertNotContains(detail, email_url)
         self.assertNotContains(detail, count_url)
         self.assertNotContains(detail, paper_url)
         self.assertNotContains(detail, "会員リスト取込")
         self.assertContains(detail, reverse(
-            "election:management_voters", args=[assigned.pk, assigned_election.pk]
+            "election:management_voters", args=[assigned.year, assigned_election.pk]
         ))
         assigned_election.status = Election.Status.OPEN
         assigned_election.start_at = self.now - timedelta(days=1)
         assigned_election.end_at = self.now + timedelta(days=1)
         assigned_election.save(update_fields=["status", "start_at", "end_at"])
         open_detail = self.client.get(reverse(
-            "election:management_cycle_detail", args=[assigned.pk]
+            "election:management_cycle_detail", args=[assigned.year]
         ))
         self.assertContains(open_detail, email_url)
         self.assertContains(open_detail, paper_url)
@@ -222,7 +223,7 @@ class ManagementCycleViewTest(TestCase):
         blocked_send = self.client.post(
             reverse(
                 "election:management_email_send",
-                args=[assigned.pk, assigned_election.pk],
+                args=[assigned.year, assigned_election.pk],
             ),
             follow=True,
         )
@@ -232,7 +233,7 @@ class ManagementCycleViewTest(TestCase):
         assigned_election.status = Election.Status.CLOSED
         assigned_election.save(update_fields=["status"])
         closed_detail = self.client.get(reverse(
-            "election:management_cycle_detail", args=[assigned.pk]
+            "election:management_cycle_detail", args=[assigned.year]
         ))
         self.assertContains(closed_detail, count_url)
         self.assertNotContains(closed_detail, email_url)
@@ -240,7 +241,7 @@ class ManagementCycleViewTest(TestCase):
         assigned_election.status = Election.Status.COUNTED
         assigned_election.save(update_fields=["status"])
         counted_detail = self.client.get(reverse(
-            "election:management_cycle_detail", args=[assigned.pk]
+            "election:management_cycle_detail", args=[assigned.year]
         ))
         self.assertContains(counted_detail, "選挙結果")
         self.assertContains(counted_detail, count_url)
@@ -258,7 +259,7 @@ class ManagementCycleViewTest(TestCase):
         )
         self.assertEqual(
             self.client.get(reverse(
-                "election:management_cycle_detail", args=[hidden.pk]
+                "election:management_cycle_detail", args=[hidden.year]
             )).status_code,
             404,
         )
@@ -269,7 +270,7 @@ class ManagementCycleViewTest(TestCase):
         hidden_election = hidden.elections.first()
         response = self.client.post(
             reverse("election:management_election_status", args=[
-                hidden.pk, hidden_election.pk,
+                hidden.year, hidden_election.pk,
             ]),
             {"status": Election.Status.OPEN},
         )
@@ -283,11 +284,11 @@ class ManagementCycleViewTest(TestCase):
         self.assertContains(response, cycle.name)
         self.assertContains(response, "新しい年度を作成")
         detail = self.client.get(reverse(
-            "election:management_cycle_detail", args=[cycle.pk]
+            "election:management_cycle_detail", args=[cycle.year]
         ))
         self.assertContains(detail, "data-open-cycle-dialog")
         self.assertContains(detail, reverse(
-            "election:management_cycle_edit", args=[cycle.pk]
+            "election:management_cycle_edit", args=[cycle.year]
         ))
         self.assertNotContains(detail, "会員リスト取込")
 
@@ -321,7 +322,7 @@ class ManagementCycleViewTest(TestCase):
         voter = VoterParticipation.objects.get(election=election, member=member)
         self.client.force_login(manager)
         response = self.client.post(
-            reverse("election:management_voters", args=[cycle.pk, election.pk]),
+            reverse("election:management_voters", args=[cycle.year, election.pk]),
             {"voters": [voter.pk]},
         )
         voter.refresh_from_db()
@@ -330,7 +331,7 @@ class ManagementCycleViewTest(TestCase):
         self.assertRedirects(
             response,
             reverse(
-                "election:management_voters", args=[cycle.pk, election.pk]
+                "election:management_voters", args=[cycle.year, election.pk]
             ),
         )
 
@@ -339,7 +340,7 @@ class ManagementCycleViewTest(TestCase):
             election=other_election, member=member
         )
         response = self.client.post(
-            reverse("election:management_voters", args=[cycle.pk, election.pk]),
+            reverse("election:management_voters", args=[cycle.year, election.pk]),
             {"voters": [other_voter.pk]},
         )
         self.assertEqual(response.status_code, 403)
@@ -393,7 +394,7 @@ class ManagementCycleViewTest(TestCase):
         )
         self.client.force_login(manager)
         status_url = reverse("election:management_candidate_status", args=[
-            cycle.pk, preliminary.pk, preliminary_candidate.pk,
+            cycle.year, preliminary.pk, preliminary_candidate.pk,
         ])
 
         self.client.post(status_url, {"status": Candidate.Status.QUALIFIED})
@@ -410,11 +411,11 @@ class ManagementCycleViewTest(TestCase):
         )
         add_url = lambda member: reverse(
             "election:management_candidate_add",
-            args=[cycle.pk, final.pk, member.pk],
+            args=[cycle.year, final.pk, member.pk],
         )
         page = self.client.get(
             reverse(
-                "election:management_candidates", args=[cycle.pk, final.pk]
+                "election:management_candidates", args=[cycle.year, final.pk]
             ),
             {"q": "候補"},
         )
@@ -461,7 +462,7 @@ class ManagementCycleViewTest(TestCase):
 
         self.client.post(reverse(
             "election:management_candidate_remove",
-            args=[cycle.pk, final.pk, corrected.pk],
+            args=[cycle.year, final.pk, corrected.pk],
         ))
         corrected.refresh_from_db()
         self.assertEqual(corrected.status, Candidate.Status.DISQUALIFIED)
@@ -488,7 +489,7 @@ class ManagementCycleViewTest(TestCase):
         response = self.client.post(
             reverse(
                 "election:management_election_status",
-                args=[cycle.pk, election.pk],
+                args=[cycle.year, election.pk],
             ),
             {"status": Election.Status.OPEN},
         )
@@ -496,7 +497,7 @@ class ManagementCycleViewTest(TestCase):
         self.assertEqual(election.status, Election.Status.OPEN)
         self.assertRedirects(
             response,
-            reverse("election:management_cycle_detail", args=[cycle.pk]),
+            reverse("election:management_cycle_detail", args=[cycle.year]),
         )
 
 

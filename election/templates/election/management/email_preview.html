@@ -1,7 +1,7 @@
 {% extends "election/management/base.html" %}
 {% block title %}投票メール送信{% endblock %}
 {% block content %}
-<p><a href="{% url 'election:management_cycle_detail' cycle.pk %}">← {{ cycle.year }}年度</a></p>
+<p><a href="{% url 'election:management_cycle_detail' cycle.year %}">← {{ cycle.year }}年度</a></p>
 <div class="form-card">
     <h1>投票メール送信</h1>
     <h2>{{ election }}</h2>
@@ -30,7 +30,7 @@
         </div>
         <button class="dialog-close" type="button" data-close-email-dialog aria-label="閉じる">×</button>
     </div>
-    <form method="post" action="{% url 'election:management_email_send' cycle.pk election.pk %}">
+    <form method="post" action="{% url 'election:management_email_send' cycle.year election.pk %}">
         {% csrf_token %}
         <p class="confirm-message"><strong>{{ target_count }}人</strong>にメールを送信します。よろしいですか？</p>
         <p class="confirm-note">送信を開始すると取り消せません。</p>
