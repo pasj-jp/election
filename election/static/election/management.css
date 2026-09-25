@@ -76,3 +76,7 @@
 .confirm-dialog{width:min(480px,92vw)}.confirm-message{margin:2px 0 8px;color:var(--ink);font-size:1.05rem}.confirm-message strong{color:var(--primary);font-size:1.35rem}.confirm-note{margin:0;color:var(--muted);font-size:.88rem}
 
 .sent-button,.sent-button:hover{border-color:#53636d;background:#53636d;color:#fff;box-shadow:none;transform:none}
+
+.cycle-card{transition:background-color .15s ease,border-color .15s ease}
+.cycle-card:hover,.cycle-card:focus-visible{background:#edf6f4;border-color:#9fc9c3}
+.cycle-card:focus-visible{outline:3px solid #136f6330;outline-offset:2px}
