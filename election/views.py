@@ -215,6 +215,10 @@ def manual_candidate_status_choices(election):
     return tuple(
         (value, label)
         for value, label in Candidate.Status.choices if value in statuses
+        and not (
+            election.office == Election.Office.PRESIDENT
+            and value == Candidate.Status.ACCEPTED
+        )
     )
 
 
@@ -310,11 +314,7 @@ def management_candidate_status(request, cycle_year, election_id, candidate_id):
         election=election,
     )
     new_status = request.POST.get("status")
-    allowed_statuses = (
-        PRELIMINARY_MANUAL_CANDIDATE_STATUSES
-        if election.phase == Election.Phase.PRELIMINARY
-        else FINAL_MANUAL_CANDIDATE_STATUSES
-    )
+    allowed_statuses = {value for value, _ in manual_candidate_status_choices(election)}
     try:
         ensure_candidate_roster_editable(election)
     except ValidationError as exc:
