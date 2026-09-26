@@ -1,3 +1,4 @@
+import csv
 import hashlib
 import hmac
 import random
@@ -12,7 +13,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.db import transaction
 from django.db.models import Count, Q
 from django.db.models.deletion import ProtectedError
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -25,12 +26,14 @@ from .models import (
     CandidateStatusChange,
     Election,
     ElectionCycle,
+    LotteryDraw,
     MemberSnapshot,
     VoterParticipation,
 )
 from .permissions import accessible_cycles, require_cycle_access
 from .services.counting import commit_election_count, preview_election_count
 from .services.cycle_setup import setup_cycle
+from .services.result_export import build_result_export
 
 
 @require_GET
@@ -38,7 +41,7 @@ def home(request):
     return render(request, "election/home.html")
 
 
-@staff_member_required(login_url="admin:login")
+@staff_member_required(login_url="election:login")
 def management_cycle_list(request):
     cycles = list(accessible_cycles(request.user))
     # Keep independent one-to-many relations out of the same aggregate JOIN.
@@ -51,7 +54,7 @@ def management_cycle_list(request):
     return render(request, "election/management/cycle_list.html", {"cycles": cycles})
 
 
-@staff_member_required(login_url="admin:login")
+@staff_member_required(login_url="election:login")
 def management_cycle_detail(request, cycle_year):
     cycle = get_object_or_404(accessible_cycles(request.user), year=cycle_year)
     elections = list(cycle.elections.all())
@@ -103,7 +106,7 @@ def management_cycle_detail(request, cycle_year):
     })
 
 
-@staff_member_required(login_url="admin:login")
+@staff_member_required(login_url="election:login")
 def management_cycle_form(request, cycle_year=None):
     from .forms import ElectionCycleManagementForm
 
@@ -125,7 +128,7 @@ def management_cycle_form(request, cycle_year=None):
     })
 
 
-@staff_member_required(login_url="admin:login")
+@staff_member_required(login_url="election:login")
 @require_POST
 def management_election_status(request, cycle_year, election_id):
     election = get_object_or_404(
@@ -146,8 +149,11 @@ def management_election_status(request, cycle_year, election_id):
 
 
 
-@staff_member_required(login_url="admin:login")
+@staff_member_required(login_url="election:login")
 def management_voters(request, cycle_year, election_id):
+    if not request.user.is_superuser:
+        raise PermissionDenied("有権者管理はスーパーユーザーのみ利用できます。")
+
     from .services.paper_voting import accept_paper_votes
 
     election = get_management_election(request, cycle_year, election_id)
@@ -243,7 +249,7 @@ def get_management_election(request, cycle_year, election_id):
     return election
 
 
-@staff_member_required(login_url="admin:login")
+@staff_member_required(login_url="election:login")
 def management_candidates(request, cycle_year, election_id):
     election = get_management_election(request, cycle_year, election_id)
     candidates = election.candidates.select_related("member").order_by(
@@ -304,7 +310,7 @@ def delete_managed_candidate(request, candidate):
         messages.success(request, f"{candidate.member}を候補者から削除しました。")
 
 
-@staff_member_required(login_url="admin:login")
+@staff_member_required(login_url="election:login")
 @require_POST
 def management_candidate_status(request, cycle_year, election_id, candidate_id):
     election = get_management_election(request, cycle_year, election_id)
@@ -351,7 +357,7 @@ def management_candidate_status(request, cycle_year, election_id, candidate_id):
     return redirect("election:management_candidates", cycle_year=cycle_year, election_id=election_id)
 
 
-@staff_member_required(login_url="admin:login")
+@staff_member_required(login_url="election:login")
 @require_POST
 def management_candidate_add(request, cycle_year, election_id, member_id):
     election = get_management_election(request, cycle_year, election_id)
@@ -400,7 +406,7 @@ def management_candidate_add(request, cycle_year, election_id, member_id):
     return redirect(f"{url}?q={query}" if query else url)
 
 
-@staff_member_required(login_url="admin:login")
+@staff_member_required(login_url="election:login")
 @require_POST
 def management_candidate_remove(request, cycle_year, election_id, candidate_id):
     election = get_management_election(request, cycle_year, election_id)
@@ -418,7 +424,7 @@ def management_candidate_remove(request, cycle_year, election_id, candidate_id):
     return redirect("election:management_candidates", cycle_year=cycle_year, election_id=election_id)
 
 
-@staff_member_required(login_url="admin:login")
+@staff_member_required(login_url="election:login")
 def management_email_preview(request, cycle_year, election_id):
     election = get_management_election(request, cycle_year, election_id)
     if not election.is_voting_open:
@@ -442,7 +448,7 @@ def management_email_preview(request, cycle_year, election_id):
     })
 
 
-@staff_member_required(login_url="admin:login")
+@staff_member_required(login_url="election:login")
 @require_POST
 def management_email_send(request, cycle_year, election_id):
     election = get_management_election(request, cycle_year, election_id)
@@ -487,7 +493,7 @@ def management_email_send(request, cycle_year, election_id):
     return redirect("election:management_cycle_detail", cycle_year=cycle_year)
 
 
-@staff_member_required(login_url="admin:login")
+@staff_member_required(login_url="election:login")
 def management_count_preview(request, cycle_year, election_id):
     election = get_management_election(request, cycle_year, election_id)
     try:
@@ -497,10 +503,34 @@ def management_count_preview(request, cycle_year, election_id):
         return redirect("election:management_cycle_detail", cycle_year=cycle_year)
     return render(request, "election/management/count_preview.html", {
         "cycle": election.cycle, "election": election, "preview": preview,
+        "result_csv_available": (
+            election.status == Election.Status.COUNTED
+            and not LotteryDraw.objects.filter(
+                election=election, executed_at__isnull=True,
+            ).exists()
+        ),
     })
 
 
-@staff_member_required(login_url="admin:login")
+@staff_member_required(login_url="election:login")
+@require_GET
+def management_result_csv(request, cycle_year, election_id):
+    election = get_management_election(request, cycle_year, election_id)
+    try:
+        export = build_result_export(election)
+    except ValidationError as exc:
+        messages.error(request, "; ".join(exc.messages))
+        return redirect("election:management_cycle_detail", cycle_year=cycle_year)
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = f'attachment; filename="{export.filename}"'
+    response.write("\ufeff")
+    writer = csv.DictWriter(response, fieldnames=export.fieldnames)
+    writer.writeheader()
+    writer.writerows(export.rows)
+    return response
+
+
+@staff_member_required(login_url="election:login")
 @require_POST
 def management_count_confirm(request, cycle_year, election_id):
     election = get_management_election(request, cycle_year, election_id)
@@ -521,7 +551,7 @@ def management_count_confirm(request, cycle_year, election_id):
     return redirect("election:management_cycle_detail", cycle_year=cycle_year)
 
 
-@staff_member_required(login_url="admin:login")
+@staff_member_required(login_url="election:login")
 def management_paper_ballot(request, cycle_year, election_id):
     from .forms import PaperBallotForm
     from .services.paper_voting import create_paper_ballot
@@ -539,10 +569,15 @@ def management_paper_ballot(request, cycle_year, election_id):
         else:
             messages.success(request, "書面票を匿名票として1票登録しました。")
             return redirect("election:management_paper_ballot", cycle_year=cycle_year, election_id=election_id)
+    paper_ballot_count = election.ballots.filter(voting_method="paper").count()
+    paper_voter_count = election.voter_participations.filter(
+        voting_method="paper", voted_at__isnull=False,
+    ).count()
     return render(request, "election/management/paper_ballot.html", {
         "cycle": election.cycle, "election": election, "form": form,
-        "paper_ballot_count": election.ballots.filter(voting_method="paper").count(),
-        "paper_voter_count": election.voter_participations.filter(voting_method="paper").count(),
+        "paper_ballot_count": paper_ballot_count,
+        "paper_voter_count": paper_voter_count,
+        "can_register_paper_ballot": paper_ballot_count < paper_voter_count,
     })
 
 

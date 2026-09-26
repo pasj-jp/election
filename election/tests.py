@@ -76,11 +76,11 @@ class ManagementCycleViewTest(TestCase):
         self.client.force_login(self.user)
         self.now = timezone.now().replace(microsecond=0)
 
-    def test_anonymous_user_is_redirected_to_admin_login(self):
+    def test_anonymous_user_is_redirected_to_management_login(self):
         self.client.logout()
         response = self.client.get(reverse("election:management_cycle_list"))
         self.assertEqual(response.status_code, 302)
-        self.assertIn(reverse("admin:login"), response.url)
+        self.assertIn(reverse("election:login"), response.url)
 
     def test_creating_cycle_builds_six_elections(self):
         response = self.client.post(reverse("election:management_cycle_create"), {
@@ -270,7 +270,7 @@ class ManagementCycleViewTest(TestCase):
         self.assertNotContains(detail, count_url)
         self.assertNotContains(detail, paper_url)
         self.assertNotContains(detail, "会員リスト取込")
-        self.assertContains(detail, reverse(
+        self.assertNotContains(detail, reverse(
             "election:management_voters", args=[assigned.year, assigned_election.pk]
         ))
         assigned_election.status = Election.Status.OPEN
@@ -398,7 +398,18 @@ class ManagementCycleViewTest(TestCase):
         election.status = Election.Status.OPEN
         election.save(update_fields=["status"])
         voter = VoterParticipation.objects.get(election=election, member=member)
+        url = reverse("election:management_voters", args=[cycle.year, election.pk])
         self.client.force_login(manager)
+        self.assertEqual(self.client.get(url).status_code, 403)
+        self.assertEqual(self.client.post(url, {"voters": [voter.pk]}).status_code, 403)
+        voter.refresh_from_db()
+        self.assertIsNone(voter.voted_at)
+        self.client.logout()
+        self.assertEqual(self.client.get(url).status_code, 302)
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.get(url).status_code, 200)
+        detail = self.client.get(reverse("election:management_cycle_detail", args=[cycle.year]))
+        self.assertContains(detail, url)
         response = self.client.post(
             reverse("election:management_voters", args=[cycle.year, election.pk]),
             {"voters": [voter.pk]},
@@ -799,6 +810,7 @@ class PaperVotingTest(TestCase):
         )
 
     def test_paper_ballot_is_anonymous_and_marked_as_paper(self):
+        accept_paper_votes([self.voter.pk])
         ballot = create_paper_ballot(
             self.election,
             [self.candidate],
@@ -815,6 +827,7 @@ class PaperVotingTest(TestCase):
         self.assertFalse(hasattr(ballot, "voter_participation"))
 
     def test_admin_can_enter_one_paper_ballot(self):
+        accept_paper_votes([self.voter.pk])
         url = reverse(
             "admin:election_election_paper_ballot",
             args=[self.election.pk],
@@ -840,6 +853,31 @@ class PaperVotingTest(TestCase):
             ).count(),
             1,
         )
+
+    def test_paper_ballots_cannot_exceed_receptions(self):
+        with self.assertRaises(ValidationError):
+            create_paper_ballot(self.election, [self.candidate])
+        self.assertFalse(self.election.ballots.exists())
+        accept_paper_votes([self.voter.pk])
+        create_paper_ballot(self.election, [self.candidate])
+        with self.assertRaises(ValidationError):
+            create_paper_ballot(self.election, [self.candidate])
+        self.assertEqual(self.election.ballots.count(), 1)
+        self.assertEqual(BallotChoice.objects.filter(ballot__election=self.election).count(), 1)
+
+    def test_management_disables_registration_when_receptions_are_filled(self):
+        self.election.status = Election.Status.OPEN
+        self.election.save(update_fields=["status"])
+        url = reverse("election:management_paper_ballot", args=[self.cycle.year, self.election.pk])
+        disabled_button = '<button class="button primary" type="submit" disabled>この書面票を登録</button>'
+        self.assertContains(self.client.get(url), disabled_button, html=True)
+        accept_paper_votes([self.voter.pk])
+        self.assertNotContains(self.client.get(url), disabled_button, html=True)
+        response = self.client.post(url, {"candidates": [self.candidate.pk]}, follow=True)
+        self.assertContains(response, disabled_button, html=True)
+        response = self.client.post(url, {"candidates": [self.candidate.pk]})
+        self.assertContains(response, "書面投票受付済み人数に達しているため")
+        self.assertEqual(self.election.ballots.count(), 1)
 
     def test_counted_election_rejects_paper_ballots(self):
         self.election.status = Election.Status.COUNTED
@@ -1318,6 +1356,89 @@ class CountPreviewTest(TestCase):
         self.assertEqual(rows[0]["member_no"], "m002")
         self.assertEqual(rows[0]["vote_count"], "2")
 
+    def management_csv_url(self):
+        return reverse("election:management_result_csv", args=[
+            self.cycle.year, self.election.pk,
+        ])
+
+    def test_management_csv_matches_admin_and_has_download_link(self):
+        response = self.client.get(self.management_csv_url())
+        admin_response = self.client.get(reverse(
+            "admin:election_election_result_csv", args=[self.election.pk],
+        ))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, admin_response.content)
+        page = self.client.get(reverse("election:management_count_preview", args=[
+            self.cycle.year, self.election.pk,
+        ]))
+        self.assertContains(page, self.management_csv_url())
+
+    def test_management_csv_enforces_cycle_access(self):
+        user = get_user_model().objects.create_user(username="csv-manager", is_staff=True)
+        self.client.force_login(user)
+        self.assertEqual(self.client.get(self.management_csv_url()).status_code, 403)
+        group = Group.objects.create(name="CSV担当")
+        user.groups.add(group)
+        self.cycle.manager_groups.add(group)
+        self.assertEqual(self.client.get(self.management_csv_url()).status_code, 200)
+        wrong_year = reverse("election:management_result_csv", args=[
+            self.cycle.year + 1, self.election.pk,
+        ])
+        self.assertEqual(self.client.get(wrong_year).status_code, 404)
+        self.client.logout()
+        self.assertEqual(self.client.get(self.management_csv_url()).status_code, 302)
+
+    def test_management_csv_requires_counting_and_completed_lottery(self):
+        for status in (Election.Status.DRAFT, Election.Status.OPEN, Election.Status.CLOSED):
+            self.election.status = status
+            self.election.save(update_fields=["status"])
+            self.assertEqual(self.client.get(self.management_csv_url()).status_code, 302)
+        self.election.status = Election.Status.COUNTED
+        self.election.save(update_fields=["status"])
+        lottery = LotteryDraw.objects.create(
+            election=self.election, category=LotteryDraw.Category.PRESIDENT,
+            vote_count=2, seats_remaining=1,
+        )
+        self.assertEqual(self.client.get(self.management_csv_url()).status_code, 302)
+        page_url = reverse("election:management_count_preview", args=[
+            self.cycle.year, self.election.pk,
+        ])
+        self.assertNotContains(self.client.get(page_url), "結果CSVをダウンロード")
+        lottery.executed_at = timezone.now()
+        lottery.save(update_fields=["executed_at"])
+        self.assertEqual(self.client.get(self.management_csv_url()).status_code, 200)
+
+    def test_preliminary_csv_uses_threshold_for_each_office_and_category(self):
+        for office, category, threshold in (
+            (Election.Office.PRESIDENT, "", 10),
+            (Election.Office.REPRESENTATIVE, "general", 3),
+            (Election.Office.REPRESENTATIVE, "corporate", 3),
+        ):
+            with self.subTest(office=office, category=category):
+                preliminary = Election.objects.create(
+                    cycle=self.cycle, office=office, representative_category=category,
+                    phase=Election.Phase.PRELIMINARY, status=Election.Status.COUNTED,
+                    start_at=self.election.start_at, end_at=self.election.end_at,
+                )
+                Candidate.objects.filter(election=preliminary).delete()
+                high = Candidate.objects.create(election=preliminary, member=self.high_vote.member)
+                low = Candidate.objects.create(election=preliminary, member=self.low_vote.member)
+                for candidate, votes in ((high, threshold), (low, threshold - 1)):
+                    for _ in range(votes):
+                        ballot = Ballot.objects.create(election=preliminary)
+                        BallotChoice.objects.create(ballot=ballot, candidate=candidate)
+                url = reverse("election:management_result_csv", args=[self.cycle.year, preliminary.pk])
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("preliminary-2029.csv", response["Content-Disposition"])
+                rows = list(csv.DictReader(StringIO(response.content.decode("utf-8-sig"))))
+                self.assertEqual([row["result"] for row in rows], ["本選挙進出", "基準未達"])
+                self.assertEqual([row["vote_count"] for row in rows], [str(threshold), str(threshold - 1)])
+                if category:
+                    self.assertEqual(rows[0]["category"], preliminary.get_representative_category_display())
+                admin_response = self.client.get(reverse("admin:election_election_result_csv", args=[preliminary.pk]))
+                self.assertEqual(response.content, admin_response.content)
+
     def test_result_csv_is_unavailable_before_counting(self):
         self.election.status = Election.Status.CLOSED
         self.election.save(update_fields=["status"])
@@ -1333,7 +1454,7 @@ class CountPreviewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "CSVを出力できるのは開票済みの本選挙だけです。",
+            "CSVを出力できるのは開票済みの選挙だけです。",
         )
 
     def test_tied_president_election_can_be_decided_by_lottery(self):

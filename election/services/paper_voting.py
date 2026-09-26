@@ -40,8 +40,19 @@ def accept_paper_votes(voter_ids):
 
 @transaction.atomic
 def create_paper_ballot(election, candidates):
+    election = Election.objects.select_for_update().get(pk=election.pk)
     if election.status == Election.Status.COUNTED:
         raise ValidationError("開票済みの選挙には書面票を登録できません。")
+
+    paper_voter_count = election.voter_participations.filter(
+        voting_method=VoterParticipation.VotingMethod.PAPER,
+        voted_at__isnull=False,
+    ).count()
+    paper_ballot_count = election.ballots.filter(
+        voting_method=Ballot.VotingMethod.PAPER,
+    ).count()
+    if paper_ballot_count >= paper_voter_count:
+        raise ValidationError("書面投票受付済み人数に達しているため、書面票を追加登録できません。")
 
     candidates = list(candidates)
     candidate_ids = [candidate.pk for candidate in candidates]

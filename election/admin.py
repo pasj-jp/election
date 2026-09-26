@@ -817,8 +817,7 @@ class ElectionAdmin(admin.ModelAdmin):
                     election
                 )
                 extra_context["result_csv_available"] = (
-                    election.phase == Election.Phase.FINAL
-                    and election.status == Election.Status.COUNTED
+                    election.status == Election.Status.COUNTED
                     and not LotteryDraw.objects.filter(
                         election=election,
                         executed_at__isnull=True,

@@ -110,3 +110,6 @@ DEFAULT_FROM_EMAIL = os.environ.get(
     "vote@pasj.jp",
 )
 
+
+# 認証が必要な画面は選挙システムのログイン画面へ案内する。
+LOGIN_URL = "election:login"

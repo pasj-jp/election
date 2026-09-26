@@ -1,0 +1,8 @@
+{% extends "election/management/base.html" %}
+{% block title %}{% block auth_title %}{% endblock %} | 日本加速器学会 選挙システム{% endblock %}
+{% block content %}
+<section class="form-card auth-card" aria-labelledby="auth-heading">
+    <div class="auth-eyebrow">日本加速器学会 選挙システム</div>
+    {% block auth_content %}{% endblock %}
+</section>
+{% endblock %}

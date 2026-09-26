@@ -90,3 +90,39 @@
 .candidate-roster-table th:nth-child(5){width:14rem}
 .candidate-roster-table th:nth-child(6){width:10rem}
 .candidate-roster-table-final{min-width:70rem}
+
+/* 書面票の候補者は行全体で選択できる。 */
+.paper-candidates{min-width:0;margin:22px 0;padding:0;border:0}
+.paper-candidates legend{font-weight:700}
+.paper-candidate-list{display:grid;gap:10px}
+.paper-candidate{position:relative;display:block;cursor:pointer}
+.paper-candidate input[type="checkbox"]{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+.paper-candidate-card{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:60px;padding:15px 18px;border:2px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+.paper-candidate-name{min-width:0;overflow-wrap:anywhere;font-weight:650}
+.paper-candidate:hover .paper-candidate-card{border-color:#78a69f;background:#edf6f4}
+.paper-candidate input:checked + .paper-candidate-card{border-color:var(--primary);background:var(--primary);color:#fff}
+.paper-candidate input:focus-visible + .paper-candidate-card{outline:3px solid #183047;outline-offset:3px}
+
+.paper-ballot-card{margin-bottom:calc(100px + env(safe-area-inset-bottom,0px))}
+.paper-candidate-affiliation{min-width:0;overflow-wrap:anywhere;font-size:.9rem;text-align:right}
+.paper-ballot-submit{position:fixed;z-index:20;bottom:0;left:0;right:0;display:flex;justify-content:center;padding:14px 4vw calc(14px + env(safe-area-inset-bottom,0px));background:#fff;border-top:1px solid var(--line);box-shadow:0 -4px 16px #18304714}
+.paper-ballot-submit .button{width:min(100%,420px);min-height:48px}
+@media(max-width:600px){.paper-candidate-card{align-items:flex-start;flex-direction:column;gap:5px}.paper-candidate-affiliation{text-align:left}}
+
+.paper-ballot-submit{flex-direction:column;align-items:center;gap:8px}
+.paper-ballot-submit [role="status"]{font-size:.9rem;text-align:center}
+.paper-ballot-card{margin-bottom:calc(150px + env(safe-area-inset-bottom,0px))}
+
+/* 認証画面とユーザーメニュー。 */
+.auth-card{width:100%;max-width:500px;margin:60px auto;padding:34px}
+.auth-card h1{font-size:1.65rem;overflow-wrap:anywhere}
+.auth-card p{line-height:1.8}
+.auth-eyebrow{margin-bottom:18px;color:var(--primary);font-size:.85rem;font-weight:700}
+.auth-submit{width:100%;min-height:46px;margin-top:10px}
+.auth-links{text-align:center;margin-bottom:0}
+.auth-help{font-size:.85rem;color:var(--muted);line-height:1.6;margin-top:8px}
+.auth-help ul{padding-left:1.25rem;list-style:disc}
+.auth-card input:focus-visible{outline:3px solid #136f6330;outline-offset:2px;border-color:var(--primary)}
+.account-name{font-weight:650;overflow-wrap:anywhere}
+.site-header{gap:18px}.site-header nav{flex-wrap:wrap;justify-content:flex-end}.site-header form{margin:0}
+@media(max-width:700px){.site-header{align-items:flex-start;flex-direction:column}.site-header nav{justify-content:flex-start;gap:12px}.site-header nav>a{display:inline}.auth-card{margin:20px auto;padding:24px}.account-name{max-width:100%}}

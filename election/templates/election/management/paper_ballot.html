@@ -1,1 +1,15 @@
-{% extends "election/management/base.html" %}{% block title %}書面票入力{% endblock %}{% block content %}<p><a href="{% url 'election:management_cycle_detail' cycle.year %}">← {{ cycle.year }}年度</a></p><div class="form-card wide"><h1>書面票入力</h1><h2>{{ election }}</h2><dl class="summary-list"><div><dt>書面投票受付済み</dt><dd>{{ paper_voter_count }}名</dd></div><div><dt>匿名の書面票登録済み</dt><dd>{{ paper_ballot_count }}票</dd></div></dl>{% if paper_voter_count != paper_ballot_count %}<p class="warning">受付人数と書面票数が一致していません。</p>{% endif %}<form method="post" novalidate>{% csrf_token %}{{ form.non_field_errors }}<div class="field">{{ form.candidates.errors }}{{ form.candidates.label_tag }}{{ form.candidates }}<small>{{ form.candidates.help_text }}</small></div><button class="button primary" type="submit">この書面票を登録</button></form></div>{% endblock %}
+{% extends "election/management/base.html" %}{% block title %}書面票入力{% endblock %}{% block content %}<p><a href="{% url 'election:management_cycle_detail' cycle.year %}">← {{ cycle.year }}年度</a></p><div class="form-card wide paper-ballot-card"><h1>書面票入力</h1><h2>{{ election }}</h2><dl class="summary-list"><div><dt>書面投票受付済み</dt><dd>{{ paper_voter_count }}名</dd></div><div><dt>匿名の書面票登録済み</dt><dd>{{ paper_ballot_count }}票</dd></div></dl>{% if paper_voter_count != paper_ballot_count %}<p class="warning">受付人数と書面票数が一致していません。</p>{% endif %}<form method="post" novalidate>{% csrf_token %}{{ form.non_field_errors }}<fieldset class="paper-candidates" aria-describedby="paper-candidates-help">
+<legend>{{ form.candidates.label }}</legend>
+{{ form.candidates.errors }}
+<p id="paper-candidates-help">{{ form.candidates.help_text }}候補者をクリックすると選択でき、もう一度クリックすると解除できます。</p>
+<div class="paper-candidate-list">
+{% for choice in form.candidates %}
+<label class="paper-candidate">
+{{ choice.tag }}
+{% with member=choice.data.value.instance.member %}
+<span class="paper-candidate-card"><span class="paper-candidate-name">{{ member.last_name }} {{ member.first_name }}</span><span class="paper-candidate-affiliation">{{ member.affiliation }}</span></span>
+{% endwith %}
+</label>
+{% empty %}<p>選択できる候補者がいません。</p>{% endfor %}
+</div>
+</fieldset><div class="paper-ballot-submit">{% if not can_register_paper_ballot %}<span role="status">受付済み人数に達しているため、追加登録できません。</span>{% endif %}<button class="button primary" type="submit"{% if not can_register_paper_ballot %} disabled{% endif %}>この書面票を登録</button></div></form></div>{% endblock %}

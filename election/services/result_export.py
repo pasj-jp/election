@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from django.db.models import Count, Q
 
 from ..models import Candidate, Election, LotteryDraw
+from .counting import NOMINATION_THRESHOLDS
 
 
 @dataclass(frozen=True)
@@ -23,12 +24,9 @@ def result_label(candidate):
 
 
 def build_result_export(election):
-    if (
-        election.phase != Election.Phase.FINAL
-        or election.status != Election.Status.COUNTED
-    ):
+    if election.status != Election.Status.COUNTED:
         raise ValidationError(
-            "CSVを出力できるのは開票済みの本選挙だけです。"
+            "CSVを出力できるのは開票済みの選挙だけです。"
         )
     if LotteryDraw.objects.filter(
         election=election,
@@ -67,8 +65,18 @@ def build_result_export(election):
     rows = []
     for candidate in candidates:
         member = candidate.member
+        label = result_label(candidate)
+        if (
+            election.phase == Election.Phase.PRELIMINARY
+            and candidate.status == Candidate.Status.ELIGIBLE
+        ):
+            label = (
+                "本選挙進出"
+                if candidate.vote_count >= NOMINATION_THRESHOLDS[election.office]
+                else "基準未達"
+            )
         row = {
-            "result": result_label(candidate),
+            "result": label,
             "vote_count": candidate.vote_count,
             "member_no": member.member_no,
             "last_name": member.last_name,
@@ -90,6 +98,9 @@ def build_result_export(election):
         category = election.representative_category
         filename = f"representative-{category}-{year}.csv"
         fieldnames = ("category",) + common_fields + ("business_category",)
+
+    if election.phase == Election.Phase.PRELIMINARY:
+        filename = filename.replace(f"-{year}.csv", f"-preliminary-{year}.csv")
 
     return ResultExport(
         filename=filename,
