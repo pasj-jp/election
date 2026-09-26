@@ -11,6 +11,7 @@ from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db import transaction
 from django.db.models import Count, Q
+from django.db.models.deletion import ProtectedError
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -64,7 +65,12 @@ def management_cycle_detail(request, cycle_year):
         election.email_sent_count = participation_stats["email_sent_count"]
         election.voted_count = participation_stats["voted_count"]
         election.ballot_count = election.ballots.count()
-        election.candidate_count = election.candidates.count()
+        candidate_stats = election.candidates.aggregate(
+            total=Count("pk"),
+            non_declined=Count("pk", filter=~Q(status=Candidate.Status.DECLINED)),
+        )
+        election.candidate_count = candidate_stats["total"]
+        election.non_declined_candidate_count = candidate_stats["non_declined"]
     office_order = {
         (Election.Office.PRESIDENT, ""): 0,
         (
@@ -185,7 +191,6 @@ def management_voters(request, cycle_year, election_id):
 
 PRELIMINARY_MANUAL_CANDIDATE_STATUSES = (
     Candidate.Status.ELIGIBLE,
-    Candidate.Status.DECLINED,
     Candidate.Status.DISQUALIFIED,
 )
 FINAL_MANUAL_CANDIDATE_STATUSES = (
@@ -207,7 +212,10 @@ def manual_candidate_status_choices(election):
         if election.phase == Election.Phase.PRELIMINARY
         else FINAL_MANUAL_CANDIDATE_STATUSES
     )
-    return tuple(choice for choice in Candidate.Status.choices if choice[0] in statuses)
+    return tuple(
+        (value, label)
+        for value, label in Candidate.Status.choices if value in statuses
+    )
 
 
 def ensure_candidate_roster_editable(election):
@@ -238,8 +246,8 @@ def management_candidates(request, cycle_year, election_id):
         "member__member_no"
     )
     history = CandidateStatusChange.objects.filter(
-        candidate__election=election
-    ).select_related("candidate__member", "changed_by")[:30]
+        election=election
+    ).select_related("member", "changed_by")[:30]
     member_query = request.GET.get("q", "").strip()
     member_results = MemberSnapshot.objects.none()
     if election.phase == Election.Phase.FINAL and member_query:
@@ -276,6 +284,22 @@ def management_candidates(request, cycle_year, election_id):
     })
 
 
+def delete_managed_candidate(request, candidate):
+    try:
+        with transaction.atomic():
+            CandidateStatusChange.objects.create(
+                candidate=candidate,
+                previous_status=candidate.status,
+                new_status=Candidate.Status.DISQUALIFIED,
+                changed_by=request.user,
+            )
+            candidate.delete()
+    except ProtectedError:
+        messages.error(request, "投票・抽選データから参照されている候補者は削除できません。")
+    else:
+        messages.success(request, f"{candidate.member}を候補者から削除しました。")
+
+
 @staff_member_required(login_url="admin:login")
 @require_POST
 def management_candidate_status(request, cycle_year, election_id, candidate_id):
@@ -298,6 +322,8 @@ def management_candidate_status(request, cycle_year, election_id, candidate_id):
     else:
         if candidate.status in FINAL_CANDIDATE_STATUSES:
             messages.error(request, "開票処理で確定した候補者状態は手動変更できません。")
+        elif new_status == Candidate.Status.DISQUALIFIED:
+            delete_managed_candidate(request, candidate)
         elif new_status == candidate.status:
             messages.info(request, "候補者状態に変更はありません。")
         elif new_status not in allowed_statuses:
@@ -388,20 +414,7 @@ def management_candidate_remove(request, cycle_year, election_id, candidate_id):
     except ValidationError as exc:
         messages.error(request, "; ".join(exc.messages))
     else:
-        if candidate.status == Candidate.Status.DISQUALIFIED:
-            messages.info(request, "この候補者はすでに除外されています。")
-        else:
-            previous_status = candidate.status
-            candidate.status = Candidate.Status.DISQUALIFIED
-            with transaction.atomic():
-                candidate.save(update_fields=["status"])
-                CandidateStatusChange.objects.create(
-                    candidate=candidate,
-                    previous_status=previous_status,
-                    new_status=Candidate.Status.DISQUALIFIED,
-                    changed_by=request.user,
-                )
-            messages.success(request, f"{candidate.member}を本選挙候補者から除外しました。")
+        delete_managed_candidate(request, candidate)
     return redirect("election:management_candidates", cycle_year=cycle_year, election_id=election_id)
 
 

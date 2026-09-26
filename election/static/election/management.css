@@ -80,3 +80,13 @@
 .cycle-card{transition:background-color .15s ease,border-color .15s ease}
 .cycle-card:hover,.cycle-card:focus-visible{background:#edf6f4;border-color:#9fc9c3}
 .cycle-card:focus-visible{outline:3px solid #136f6330;outline-offset:2px}
+
+.candidate-roster-table{table-layout:fixed;min-width:60rem}
+.candidate-roster-table th:nth-child(1){width:7rem}
+.candidate-roster-table th:nth-child(2){width:10rem}
+.candidate-roster-table td:nth-child(2),.candidate-roster-table td:nth-child(3){overflow-wrap:anywhere}
+.candidate-roster-table th:nth-child(4){width:11rem;white-space:nowrap}
+.candidate-roster-table td:nth-child(4){white-space:nowrap}
+.candidate-roster-table th:nth-child(5){width:14rem}
+.candidate-roster-table th:nth-child(6){width:10rem}
+.candidate-roster-table-final{min-width:70rem}

@@ -384,7 +384,9 @@ class Candidate(models.Model):
 
 class CandidateStatusChange(models.Model):
     """選挙管理委員による候補者ステータス変更の監査履歴。"""
-    candidate = models.ForeignKey(Candidate, on_delete=models.PROTECT, related_name="status_changes", verbose_name="候補者")
+    candidate = models.ForeignKey(Candidate, null=True, blank=True, on_delete=models.SET_NULL, related_name="status_changes", verbose_name="候補者")
+    election = models.ForeignKey(Election, null=True, on_delete=models.PROTECT, verbose_name="選挙")
+    member = models.ForeignKey(MemberSnapshot, null=True, on_delete=models.PROTECT, verbose_name="会員")
     previous_status = models.CharField(max_length=20, choices=Candidate.Status.choices, verbose_name="変更前")
     new_status = models.CharField(max_length=20, choices=Candidate.Status.choices, verbose_name="変更後")
     changed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="candidate_status_changes", verbose_name="変更者")
@@ -396,7 +398,13 @@ class CandidateStatusChange(models.Model):
         ordering = ["-changed_at"]
 
     def __str__(self):
-        return f"{self.candidate}: {self.previous_status} → {self.new_status}"
+        return f"{self.election}: {self.member}: {self.previous_status} → {self.new_status}"
+
+    def save(self, *args, **kwargs):
+        if self.candidate_id:
+            self.election_id = self.candidate.election_id
+            self.member_id = self.candidate.member_id
+        super().save(*args, **kwargs)
 
 
 class VoterParticipation(models.Model):

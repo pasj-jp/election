@@ -542,10 +542,9 @@ class ManagementCycleViewTest(TestCase):
             "election:management_candidate_remove",
             args=[cycle.year, final.pk, corrected.pk],
         ))
-        corrected.refresh_from_db()
-        self.assertEqual(corrected.status, Candidate.Status.DISQUALIFIED)
+        self.assertFalse(Candidate.objects.filter(pk=corrected.pk).exists())
         change = CandidateStatusChange.objects.get(
-            candidate=corrected,
+            candidate__isnull=True, election=final, member=general,
             new_status=Candidate.Status.DISQUALIFIED,
         )
         self.assertEqual(
@@ -1756,3 +1755,124 @@ class ElectionAdminFormTest(TestCase):
             labels,
             ["会長", "代議員（一般枠）", "代議員（企業枠）"],
         )
+
+
+class CandidateDeletionTest(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="delete-manager", email="delete@example.com", password="password"
+        )
+        self.client.force_login(self.user)
+        self.cycle = ElectionCycle.objects.create(year=2050, name="削除テスト")
+        self.member = MemberSnapshot.objects.create(
+            cycle=self.cycle, member_no="delete001", last_name="削除", first_name="対象",
+            employee_type="正会員", representative_category="general", is_eligible_voter=True,
+        )
+
+    def make_candidate(self, phase):
+        election = Election.objects.create(
+            cycle=self.cycle, office=Election.Office.PRESIDENT, phase=phase,
+            start_at=timezone.now(), end_at=timezone.now() + timedelta(days=1),
+        )
+        candidate, _ = Candidate.objects.get_or_create(election=election, member=self.member)
+        return election, candidate
+
+    def update_status(self, election, candidate, status):
+        return self.client.post(reverse("election:management_candidate_status", args=[
+            self.cycle.year, election.pk, candidate.pk,
+        ]), {"status": status}, follow=True)
+
+    def test_disqualified_deletes_candidate_but_preserves_member_and_history(self):
+        for phase in (Election.Phase.PRELIMINARY, Election.Phase.FINAL):
+            with self.subTest(phase=phase):
+                election, candidate = self.make_candidate(phase)
+                CandidateStatusChange.objects.create(
+                    candidate=candidate, previous_status=candidate.status,
+                    new_status=candidate.status, changed_by=self.user,
+                )
+                response = self.update_status(election, candidate, Candidate.Status.DISQUALIFIED)
+                self.assertFalse(Candidate.objects.filter(pk=candidate.pk).exists())
+                self.assertTrue(MemberSnapshot.objects.filter(pk=self.member.pk).exists())
+                history = CandidateStatusChange.objects.filter(election=election, member=self.member)
+                self.assertEqual(history.count(), 2)
+                self.assertFalse(history.filter(candidate__isnull=False).exists())
+                self.assertEqual(history.first().new_status, Candidate.Status.DISQUALIFIED)
+                self.assertEqual(history.first().changed_by, self.user)
+                self.assertContains(response, "削除 対象")
+                self.assertContains(response, "候補者がいません。")
+
+    def test_existing_disqualified_candidate_can_be_deleted(self):
+        election, candidate = self.make_candidate(Election.Phase.PRELIMINARY)
+        candidate.status = Candidate.Status.DISQUALIFIED
+        candidate.save()
+        self.update_status(election, candidate, Candidate.Status.DISQUALIFIED)
+        self.assertFalse(Candidate.objects.filter(pk=candidate.pk).exists())
+
+    def test_ballot_reference_prevents_deletion_and_rolls_back_history(self):
+        election, candidate = self.make_candidate(Election.Phase.PRELIMINARY)
+        ballot = Ballot.objects.create(election=election)
+        choice = BallotChoice.objects.create(ballot=ballot, candidate=candidate)
+        response = self.update_status(election, candidate, Candidate.Status.DISQUALIFIED)
+        self.assertContains(response, "投票・抽選データから参照されている候補者は削除できません。")
+        candidate.refresh_from_db()
+        self.assertEqual(candidate.status, Candidate.Status.ELIGIBLE)
+        self.assertTrue(BallotChoice.objects.filter(pk=choice.pk).exists())
+        self.assertFalse(CandidateStatusChange.objects.filter(election=election).exists())
+
+    def test_open_election_prevents_deletion(self):
+        election, candidate = self.make_candidate(Election.Phase.PRELIMINARY)
+        election.status = Election.Status.OPEN
+        election.save()
+        self.update_status(election, candidate, Candidate.Status.DISQUALIFIED)
+        self.assertTrue(Candidate.objects.filter(pk=candidate.pk).exists())
+        self.assertFalse(CandidateStatusChange.objects.filter(election=election).exists())
+
+
+    def test_preliminary_choices_exclude_declined_and_reject_submission(self):
+        election, candidate = self.make_candidate(Election.Phase.PRELIMINARY)
+        page = self.client.get(reverse("election:management_candidates", args=[
+            self.cycle.year, election.pk,
+        ]))
+        self.assertEqual(page.context["status_choices"], (
+            (Candidate.Status.ELIGIBLE, "被選挙人"),
+            (Candidate.Status.DISQUALIFIED, "資格なし"),
+        ))
+        self.assertNotContains(page, '<option value="declined"')
+        self.assertNotContains(page, "資格なし（候補者を削除）")
+        response = self.update_status(election, candidate, Candidate.Status.DECLINED)
+        self.assertContains(response, "この候補者状態は手動で設定できません。")
+        candidate.refresh_from_db()
+        self.assertEqual(candidate.status, Candidate.Status.ELIGIBLE)
+        self.assertFalse(candidate.status_changes.exists())
+
+    def test_final_choices_keep_declined_and_allow_submission(self):
+        election, candidate = self.make_candidate(Election.Phase.FINAL)
+        page = self.client.get(reverse("election:management_candidates", args=[
+            self.cycle.year, election.pk,
+        ]))
+        self.assertContains(page, '<option value="declined">辞退</option>', html=True)
+        self.assertContains(page, '<option value="disqualified">資格なし</option>', html=True)
+        self.update_status(election, candidate, Candidate.Status.DECLINED)
+        candidate.refresh_from_db()
+        self.assertEqual(candidate.status, Candidate.Status.DECLINED)
+        self.assertEqual(candidate.status_changes.get().new_status, Candidate.Status.DECLINED)
+
+
+    def test_dashboard_candidate_count_excludes_declined_and_shows_total(self):
+        election, candidate = self.make_candidate(Election.Phase.FINAL)
+        other_member = MemberSnapshot.objects.create(
+            cycle=self.cycle, member_no="other001", last_name="別", first_name="候補者",
+        )
+        other = Candidate.objects.create(election=election, member=other_member)
+        url = reverse("election:management_cycle_detail", args=[self.cycle.year])
+        for declined_count in range(3):
+            if declined_count:
+                retiring = (candidate, other)[declined_count - 1]
+                retiring.status = Candidate.Status.DECLINED
+                retiring.save(update_fields=["status"])
+            response = self.client.get(url)
+            item = next(e for e in response.context["elections"] if e.pk == election.pk)
+            self.assertEqual(item.non_declined_candidate_count, 2 - declined_count)
+            self.assertEqual(item.candidate_count, 2)
+            self.assertContains(response, f">{2 - declined_count}(2)</dd>")
+        self.assertEqual(election.candidates.count(), 2)

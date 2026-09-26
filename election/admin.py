@@ -1214,11 +1214,11 @@ class CandidateAdmin(CycleScopedAdminMixin, admin.ModelAdmin):
 @admin.register(CandidateStatusChange)
 class CandidateStatusChangeAdmin(admin.ModelAdmin):
     list_display = (
-        "changed_at", "candidate", "previous_status", "new_status", "changed_by",
+        "changed_at", "election", "member", "candidate", "previous_status", "new_status", "changed_by",
     )
-    list_filter = ("candidate__election__cycle", "previous_status", "new_status")
+    list_filter = ("election__cycle", "previous_status", "new_status")
     readonly_fields = (
-        "candidate", "previous_status", "new_status", "changed_by", "changed_at",
+        "candidate", "election", "member", "previous_status", "new_status", "changed_by", "changed_at",
     )
 
     def has_add_permission(self, request):
