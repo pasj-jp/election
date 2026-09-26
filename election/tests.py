@@ -37,7 +37,7 @@ from .services.counting import (
 )
 from .services.cycle_setup import setup_cycle
 from .services.paper_voting import accept_paper_votes, create_paper_ballot
-from .views import (
+from .services.voting import (
     get_valid_candidate_statuses,
     should_show_candidate_route_labels,
     validate_vote,

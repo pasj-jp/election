@@ -1,0 +1,88 @@
+"""選挙管理画面のURL。"""
+from django.urls import path
+
+from . import management_views
+
+
+urlpatterns = [
+    path(
+        "",
+        management_views.management_cycle_list,
+        name="management_cycle_list",
+    ),
+    path(
+        "new/",
+        management_views.management_cycle_form,
+        name="management_cycle_create",
+    ),
+    path(
+        "<int:cycle_year>/",
+        management_views.management_cycle_detail,
+        name="management_cycle_detail",
+    ),
+    path(
+        "<int:cycle_year>/edit/",
+        management_views.management_cycle_form,
+        name="management_cycle_edit",
+    ),
+    path(
+        "<int:cycle_year>/elections/<int:election_id>/voters/",
+        management_views.management_voters,
+        name="management_voters",
+    ),
+    path(
+        "<int:cycle_year>/elections/<int:election_id>/status/",
+        management_views.management_election_status,
+        name="management_election_status",
+    ),
+    path(
+        "<int:cycle_year>/elections/<int:election_id>/candidates/",
+        management_views.management_candidates,
+        name="management_candidates",
+    ),
+    path(
+        "<int:cycle_year>/elections/<int:election_id>/candidates/<int:candidate_id>/status/",
+        management_views.management_candidate_status,
+        name="management_candidate_status",
+    ),
+    path(
+        "<int:cycle_year>/elections/<int:election_id>/candidates/add/<int:member_id>/",
+        management_views.management_candidate_add,
+        name="management_candidate_add",
+    ),
+    path(
+        "<int:cycle_year>/elections/<int:election_id>/candidates/<int:candidate_id>/remove/",
+        management_views.management_candidate_remove,
+        name="management_candidate_remove",
+    ),
+    path(
+        "<int:cycle_year>/elections/<int:election_id>/email/",
+        management_views.management_email_preview,
+        name="management_email_preview",
+    ),
+    path(
+        "<int:cycle_year>/elections/<int:election_id>/email/send/",
+        management_views.management_email_send,
+        name="management_email_send",
+    ),
+    path(
+        "<int:cycle_year>/elections/<int:election_id>/result-csv/",
+        management_views.management_result_csv,
+        name="management_result_csv",
+    ),
+    path(
+        "<int:cycle_year>/elections/<int:election_id>/count/",
+        management_views.management_count_preview,
+        name="management_count_preview",
+    ),
+    path(
+        "<int:cycle_year>/elections/<int:election_id>/count/confirm/",
+        management_views.management_count_confirm,
+        name="management_count_confirm",
+    ),
+    path(
+        "<int:cycle_year>/elections/<int:election_id>/paper-ballot/",
+        management_views.management_paper_ballot,
+        name="management_paper_ballot",
+    ),
+]

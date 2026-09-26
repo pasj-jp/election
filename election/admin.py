@@ -1,13 +1,10 @@
-import csv
 from io import StringIO
 
 from django.contrib import admin, messages
-from django.core.exceptions import PermissionDenied
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db.models import Count, Q
-from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
 
@@ -30,6 +27,7 @@ from .models import (
 )
 
 from .permissions import accessible_cycles, can_access_cycle
+from .responses import result_csv_response
 
 from .services.counting import (
     commit_election_count,
@@ -43,7 +41,7 @@ from .services.lottery import (
 )
 from .services.member_import import MemberImportError, import_members
 from .services.paper_voting import accept_paper_votes, create_paper_ballot
-from .services.result_export import build_result_export
+from .services.result_export import build_result_export, result_csv_available
 
 
 admin.site.site_header = "加速器学会選挙システム"
@@ -432,15 +430,7 @@ class ElectionAdmin(admin.ModelAdmin):
                 object_id=election.pk,
             )
 
-        response = HttpResponse(content_type="text/csv; charset=utf-8")
-        response["Content-Disposition"] = (
-            f'attachment; filename="{export.filename}"'
-        )
-        response.write("\ufeff")
-        writer = csv.DictWriter(response, fieldnames=export.fieldnames)
-        writer.writeheader()
-        writer.writerows(export.rows)
-        return response
+        return result_csv_response(export)
 
     def paper_ballot_view(self, request, object_id):
         election = get_object_or_404(
@@ -816,13 +806,7 @@ class ElectionAdmin(admin.ModelAdmin):
                 ] = self.build_result_summary(
                     election
                 )
-                extra_context["result_csv_available"] = (
-                    election.status == Election.Status.COUNTED
-                    and not LotteryDraw.objects.filter(
-                        election=election,
-                        executed_at__isnull=True,
-                    ).exists()
-                )
+                extra_context["result_csv_available"] = result_csv_available(election)
 
         return super().changeform_view(
             request,

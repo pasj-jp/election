@@ -2,7 +2,7 @@ from django import forms
 from django.db import models
 
 from .models import Candidate, Election, ElectionCycle
-from .views import get_valid_candidate_statuses, validate_vote
+from .services.voting import get_valid_candidate_statuses, validate_vote
 
 
 class ElectionCycleAdminForm(forms.ModelForm):
@@ -115,33 +115,30 @@ class ElectionAdminForm(forms.ModelForm):
         return cleaned_data
 
 
+class MemberCsvFileField(forms.FileField):
+    """会員名簿アップロードで共通のファイル形式検証。"""
+
+    def validate(self, value):
+        super().validate(value)
+        if value and not value.name.lower().endswith(".csv"):
+            raise forms.ValidationError("CSVファイルを選択してください。")
+
+
 class MemberCsvImportForm(forms.Form):
     cycle = forms.ModelChoiceField(
         queryset=ElectionCycle.objects.order_by("-year"), label="選挙年度"
     )
-    csv_file = forms.FileField(
+    csv_file = MemberCsvFileField(
         label="会員名簿CSV",
         help_text="UTF-8またはCP932（ExcelのCSV）に対応しています。",
     )
 
-    def clean_csv_file(self):
-        uploaded_file = self.cleaned_data["csv_file"]
-        if not uploaded_file.name.lower().endswith(".csv"):
-            raise forms.ValidationError("CSVファイルを選択してください。")
-        return uploaded_file
-
 
 class CycleMemberCsvImportForm(forms.Form):
-    csv_file = forms.FileField(
+    csv_file = MemberCsvFileField(
         label="会員リストCSV",
         help_text="UTF-8またはCP932（ExcelのCSV）に対応しています。",
     )
-
-    def clean_csv_file(self):
-        uploaded_file = self.cleaned_data["csv_file"]
-        if not uploaded_file.name.lower().endswith(".csv"):
-            raise forms.ValidationError("CSVファイルを選択してください。")
-        return uploaded_file
 
 
 class PaperBallotForm(forms.Form):

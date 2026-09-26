@@ -150,3 +150,20 @@ class ManagementAuthenticationTests(TestCase):
         })
         self.assertEqual(response.status_code, 405)
         self.assertNotIn("_auth_user_id", self.client.session)
+
+
+    def test_header_preserves_japanese_name_order_and_username_fallback(self):
+        self.client.force_login(self.user)
+        cases = [
+            ("山田", "太郎", "山田 太郎"),
+            ("山田", "", "山田"),
+            ("", "太郎", "太郎"),
+            ("", "", self.user.username),
+        ]
+        for last_name, first_name, expected in cases:
+            with self.subTest(last_name=last_name, first_name=first_name):
+                self.user.last_name = last_name
+                self.user.first_name = first_name
+                self.user.save(update_fields=["last_name", "first_name"])
+                response = self.client.get(reverse("election:management_cycle_list"))
+                self.assertContains(response, f'<span class="account-name">{expected}</span>', html=True)

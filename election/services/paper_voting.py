@@ -3,7 +3,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from ..models import Ballot, BallotChoice, Election, VoterParticipation
-from ..views import get_valid_candidate_statuses, validate_vote
+from .voting import get_valid_candidate_statuses, validate_vote
 
 
 @transaction.atomic

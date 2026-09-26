@@ -23,6 +23,16 @@ def result_label(candidate):
     return labels.get(candidate.status, candidate.get_status_display())
 
 
+def result_csv_available(election):
+    """開票済みで、未実行の抽選がない場合にダウンロードを案内する。"""
+    return (
+        election.status == Election.Status.COUNTED
+        and not LotteryDraw.objects.filter(
+            election=election, executed_at__isnull=True,
+        ).exists()
+    )
+
+
 def build_result_export(election):
     if election.status != Election.Status.COUNTED:
         raise ValidationError(
