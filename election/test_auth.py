@@ -123,3 +123,30 @@ class ManagementAuthenticationTests(TestCase):
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password(self.new_password))
         self.assertEqual(self.client.get(reverse("election:management_cycle_list")).status_code, 200)
+
+
+    def test_admin_login_redirects_to_shared_login(self):
+        response = self.client.get(reverse("admin:login"))
+        self.assertRedirects(response, reverse("election:login") + "?next=/admin/")
+        response = self.client.get(reverse("admin:index"), follow=True)
+        self.assertTemplateUsed(response, "election/auth/login.html")
+        self.assertEqual(response.context["next"], reverse("admin:index"))
+
+    def test_admin_login_preserves_destination_after_authentication(self):
+        destination = reverse("admin:auth_user_changelist") + "?is_staff__exact=1"
+        response = self.client.get(reverse("admin:login"), {"next": destination}, follow=True)
+        self.assertEqual(response.context["next"], destination)
+        self.user.is_superuser = True
+        self.user.save(update_fields=["is_superuser"])
+        response = self.client.post(reverse("election:login"), {
+            "username": self.user.username, "password": self.password,
+            "next": response.context["next"],
+        })
+        self.assertRedirects(response, destination)
+
+    def test_admin_login_does_not_accept_credentials(self):
+        response = self.client.post(reverse("admin:login"), {
+            "username": self.user.username, "password": self.password,
+        })
+        self.assertEqual(response.status_code, 405)
+        self.assertNotIn("_auth_user_id", self.client.session)
