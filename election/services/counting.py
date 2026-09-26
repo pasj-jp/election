@@ -237,13 +237,15 @@ def get_representative_final_candidates(
     代議員本選挙の候補者を得票数付きで取得する。
     """
 
+    member_filters = {}
+    if election.representative_category == Election.RepresentativeCategory.CORPORATE:
+        member_filters["member__representative_category"] = election.representative_category
+
     return list(
         Candidate.objects
         .filter(
             election=election,
-            member__representative_category=(
-                election.representative_category
-            ),
+            **member_filters,
             status__in=[
                 Candidate.Status.QUALIFIED,
                 Candidate.Status.ACCEPTED,

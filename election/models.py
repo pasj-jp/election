@@ -375,8 +375,8 @@ class Candidate(models.Model):
             self.election_id
             and self.member_id
             and self.election.office == Election.Office.REPRESENTATIVE
-            and self.election.representative_category
-            != self.member.representative_category
+            and self.election.representative_category == Election.RepresentativeCategory.CORPORATE
+            and self.member.representative_category != MemberSnapshot.RepresentativeCategory.CORPORATE
         ):
             raise ValidationError({
                 "member": "選挙の代議員枠と会員の所属枠が一致していません。"

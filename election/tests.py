@@ -30,7 +30,11 @@ from .models import (
     MemberSnapshot,
     VoterParticipation,
 )
-from .services.counting import commit_election_count, preview_election_count
+from .services.counting import (
+    commit_election_count,
+    get_representative_final_candidates,
+    preview_election_count,
+)
 from .services.cycle_setup import setup_cycle
 from .services.paper_voting import accept_paper_votes, create_paper_ballot
 from .views import (
@@ -1110,7 +1114,7 @@ class ElectionCycleSetupTest(TestCase):
             if election.phase == Election.Phase.PRELIMINARY:
                 expected_candidates = (
                     2
-                    if election.office == Election.Office.PRESIDENT
+                    if election.representative_category != Election.RepresentativeCategory.CORPORATE
                     else 1
                 )
                 self.assertEqual(
@@ -1515,8 +1519,10 @@ class RepresentativeElectionRulesTest(TestCase):
             Election.RepresentativeCategory.CORPORATE,
         )
 
-        self.assertEqual(general.candidates.count(), 1)
-        self.assertEqual(general.candidates.get().member, self.general_member)
+        self.assertSetEqual(
+            set(general.candidates.values_list("member_id", flat=True)),
+            {self.general_member.pk, self.corporate_member.pk},
+        )
         self.assertEqual(corporate.candidates.count(), 1)
         self.assertEqual(
             corporate.candidates.get().member,
@@ -1524,6 +1530,43 @@ class RepresentativeElectionRulesTest(TestCase):
         )
         self.assertEqual(general.voter_participations.count(), 2)
         self.assertEqual(corporate.voter_participations.count(), 2)
+
+    def test_general_candidate_regeneration_preserves_existing_candidates(self):
+        from django.core.management import call_command
+
+        preliminary = self.create_election(
+            Election.Phase.PRELIMINARY, Election.RepresentativeCategory.GENERAL,
+        )
+        preliminary.candidates.filter(member=self.corporate_member).delete()
+        existing = preliminary.candidates.get(member=self.general_member)
+        existing.status = Candidate.Status.DECLINED
+        existing.save(update_fields=["status"])
+        ineligible = self.create_member("n001", MemberSnapshot.RepresentativeCategory.CORPORATE)
+        ineligible.is_eligible_voter = False
+        ineligible.save(update_fields=["is_eligible_voter"])
+        other_year = self.create_member("y001", MemberSnapshot.RepresentativeCategory.GENERAL)
+        other_year.cycle = ElectionCycle.objects.create(year=2031, name="別年度")
+        other_year.save(update_fields=["cycle"])
+
+        call_command("generate_representative_candidates", cycle=self.cycle.year,
+                     category="general", dry_run=True, stdout=StringIO())
+        self.assertEqual(preliminary.candidates.count(), 1)
+        for _ in range(2):
+            call_command("generate_representative_candidates", cycle=self.cycle.year,
+                         category="general", stdout=StringIO())
+        self.assertSetEqual(
+            set(preliminary.candidates.values_list("member_id", flat=True)),
+            {self.general_member.pk, self.corporate_member.pk},
+        )
+        existing.refresh_from_db()
+        self.assertEqual(existing.status, Candidate.Status.DECLINED)
+
+    def test_corporate_candidates_reject_general_members(self):
+        corporate = self.create_election(
+            Election.Phase.PRELIMINARY, Election.RepresentativeCategory.CORPORATE,
+        )
+        with self.assertRaises(ValidationError):
+            Candidate(election=corporate, member=self.general_member).full_clean()
 
     def test_vote_limits_follow_category_and_phase(self):
         cases = [
@@ -1583,7 +1626,8 @@ class RepresentativeElectionRulesTest(TestCase):
             Election.Phase.FINAL,
             Election.RepresentativeCategory.GENERAL,
         )
-        candidate = preliminary.candidates.get()
+        candidate = preliminary.candidates.get(member=self.corporate_member)
+        candidate.full_clean()
         for _ in range(3):
             ballot = Ballot.objects.create(election=preliminary)
             BallotChoice.objects.create(ballot=ballot, candidate=candidate)
@@ -1596,6 +1640,17 @@ class RepresentativeElectionRulesTest(TestCase):
         commit_election_count(preliminary)
         final_candidate = Candidate.objects.get(election=final, member=candidate.member)
         self.assertEqual(final_candidate.status, Candidate.Status.QUALIFIED)
+        final_candidate.full_clean()
+        final.status = Election.Status.CLOSED
+        final.save(update_fields=["status"])
+        self.assertEqual(
+            [c.pk for c in get_representative_final_candidates(final)],
+            [final_candidate.pk],
+        )
+        commit_election_count(final)
+        final_candidate.refresh_from_db()
+        self.assertEqual(final_candidate.status, Candidate.Status.ELECTED)
+        final_candidate.full_clean()
 
     def test_voter_screens_display_representative_category(self):
         election = self.create_election(

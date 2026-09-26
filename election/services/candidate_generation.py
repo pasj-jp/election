@@ -36,7 +36,10 @@ def generate_preliminary_candidates(election, *, save=True):
         "cycle": election.cycle,
         "is_eligible_voter": True,
     }
-    if election.office == Election.Office.REPRESENTATIVE:
+    if (
+        election.office == Election.Office.REPRESENTATIVE
+        and election.representative_category == Election.RepresentativeCategory.CORPORATE
+    ):
         member_filters["representative_category"] = (
             election.representative_category
         )
