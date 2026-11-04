@@ -35,8 +35,8 @@ class ManagementAuthenticationTests(TestCase):
         self.assertRedirects(self.client.post(reverse("election:logout")), reverse("election:login"))
         self.assertNotIn("_auth_user_id", self.client.session)
 
-    def test_login_preserves_local_next_and_rejects_non_staff_and_inactive(self):
-        for staff, active in [(False, True), (True, False)]:
+    def test_login_preserves_local_next_and_rejects_inactive(self):
+        for staff, active in [(False, False), (True, False)]:
             self.user.is_staff, self.user.is_active = staff, active
             self.user.save()
             response = self.client.post(reverse("election:login"), {
@@ -52,6 +52,29 @@ class ManagementAuthenticationTests(TestCase):
             "next": "/management/new/",
         })
         self.assertRedirects(response, "/management/new/", fetch_redirect_response=False)
+
+    def test_non_staff_can_login_but_cannot_enter_admin(self):
+        self.user.is_staff = False
+        self.user.save(update_fields=["is_staff"])
+        response = self.client.post(reverse("election:login"), {
+            "username": self.user.username, "password": self.password,
+        })
+        self.assertRedirects(response, reverse("election:management_cycle_list"))
+        response = self.client.get(reverse("election:management_cycle_list"))
+        self.assertContains(response, "管理できる選挙年度がありません")
+        self.assertNotContains(response, reverse("admin:index"))
+        self.assertRedirects(
+            self.client.get(reverse("admin:index")),
+            reverse("admin:login") + "?next=/admin/",
+            fetch_redirect_response=False,
+        )
+
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+        self.assertRedirects(
+            self.client.get(reverse("election:management_cycle_list")),
+            reverse("election:login") + "?next=/management/",
+        )
 
     def request_reset(self, email=None):
         return self.client.post(reverse("election:password_reset"), {

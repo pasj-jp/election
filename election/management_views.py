@@ -2,7 +2,6 @@
 from io import StringIO
 
 from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -22,7 +21,7 @@ from .models import (
     MemberSnapshot,
     VoterParticipation,
 )
-from .permissions import accessible_cycles, require_cycle_access
+from .permissions import accessible_cycles, management_login_required, require_cycle_access
 from .responses import result_csv_response
 from .services.counting import commit_election_count, preview_election_count
 from .services.cycle_setup import setup_cycle
@@ -30,7 +29,7 @@ from .services.paper_voting import accept_paper_votes, create_paper_ballot
 from .services.result_export import build_result_export, result_csv_available
 
 
-@staff_member_required(login_url="election:login")
+@management_login_required
 def management_cycle_list(request):
     cycles = list(accessible_cycles(request.user))
     # Keep independent one-to-many relations out of the same aggregate JOIN.
@@ -43,7 +42,7 @@ def management_cycle_list(request):
     return render(request, "election/management/cycle_list.html", {"cycles": cycles})
 
 
-@staff_member_required(login_url="election:login")
+@management_login_required
 def management_cycle_detail(request, cycle_year):
     cycle = get_object_or_404(accessible_cycles(request.user), year=cycle_year)
     elections = list(cycle.elections.all())
@@ -94,7 +93,7 @@ def management_cycle_detail(request, cycle_year):
     })
 
 
-@staff_member_required(login_url="election:login")
+@management_login_required
 def management_cycle_form(request, cycle_year=None):
 
     if not request.user.is_superuser:
@@ -115,7 +114,7 @@ def management_cycle_form(request, cycle_year=None):
     })
 
 
-@staff_member_required(login_url="election:login")
+@management_login_required
 @require_POST
 def management_election_status(request, cycle_year, election_id):
     election = get_management_election(request, cycle_year, election_id)
@@ -129,7 +128,7 @@ def management_election_status(request, cycle_year, election_id):
     return redirect("election:management_cycle_detail", cycle_year=cycle_year)
 
 
-@staff_member_required(login_url="election:login")
+@management_login_required
 def management_voters(request, cycle_year, election_id):
     if not request.user.is_superuser:
         raise PermissionDenied("有権者管理はスーパーユーザーのみ利用できます。")
@@ -228,7 +227,7 @@ def get_management_election(request, cycle_year, election_id):
     return election
 
 
-@staff_member_required(login_url="election:login")
+@management_login_required
 def management_candidates(request, cycle_year, election_id):
     election = get_management_election(request, cycle_year, election_id)
     candidates = election.candidates.select_related("member").order_by(
@@ -289,7 +288,7 @@ def delete_managed_candidate(request, candidate):
         messages.success(request, f"{candidate.member}を候補者から削除しました。")
 
 
-@staff_member_required(login_url="election:login")
+@management_login_required
 @require_POST
 def management_candidate_status(request, cycle_year, election_id, candidate_id):
     election = get_management_election(request, cycle_year, election_id)
@@ -336,7 +335,7 @@ def management_candidate_status(request, cycle_year, election_id, candidate_id):
     return redirect("election:management_candidates", cycle_year=cycle_year, election_id=election_id)
 
 
-@staff_member_required(login_url="election:login")
+@management_login_required
 @require_POST
 def management_candidate_add(request, cycle_year, election_id, member_id):
     election = get_management_election(request, cycle_year, election_id)
@@ -385,7 +384,7 @@ def management_candidate_add(request, cycle_year, election_id, member_id):
     return redirect(f"{url}?q={query}" if query else url)
 
 
-@staff_member_required(login_url="election:login")
+@management_login_required
 @require_POST
 def management_candidate_remove(request, cycle_year, election_id, candidate_id):
     election = get_management_election(request, cycle_year, election_id)
@@ -403,7 +402,7 @@ def management_candidate_remove(request, cycle_year, election_id, candidate_id):
     return redirect("election:management_candidates", cycle_year=cycle_year, election_id=election_id)
 
 
-@staff_member_required(login_url="election:login")
+@management_login_required
 def management_email_preview(request, cycle_year, election_id):
     election = get_management_election(request, cycle_year, election_id)
     if not election.is_voting_open:
@@ -427,7 +426,7 @@ def management_email_preview(request, cycle_year, election_id):
     })
 
 
-@staff_member_required(login_url="election:login")
+@management_login_required
 @require_POST
 def management_email_send(request, cycle_year, election_id):
     election = get_management_election(request, cycle_year, election_id)
@@ -472,7 +471,7 @@ def management_email_send(request, cycle_year, election_id):
     return redirect("election:management_cycle_detail", cycle_year=cycle_year)
 
 
-@staff_member_required(login_url="election:login")
+@management_login_required
 def management_count_preview(request, cycle_year, election_id):
     election = get_management_election(request, cycle_year, election_id)
     try:
@@ -486,7 +485,7 @@ def management_count_preview(request, cycle_year, election_id):
     })
 
 
-@staff_member_required(login_url="election:login")
+@management_login_required
 @require_GET
 def management_result_csv(request, cycle_year, election_id):
     election = get_management_election(request, cycle_year, election_id)
@@ -498,7 +497,7 @@ def management_result_csv(request, cycle_year, election_id):
     return result_csv_response(export)
 
 
-@staff_member_required(login_url="election:login")
+@management_login_required
 @require_POST
 def management_count_confirm(request, cycle_year, election_id):
     election = get_management_election(request, cycle_year, election_id)
@@ -519,7 +518,7 @@ def management_count_confirm(request, cycle_year, election_id):
     return redirect("election:management_cycle_detail", cycle_year=cycle_year)
 
 
-@staff_member_required(login_url="election:login")
+@management_login_required
 def management_paper_ballot(request, cycle_year, election_id):
 
     election = get_management_election(request, cycle_year, election_id)

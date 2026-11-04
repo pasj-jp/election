@@ -1,5 +1,5 @@
 """選挙管理用の認証画面。トークンとパスワード検証はDjango標準を使う。"""
-from django.contrib.admin.forms import AdminAuthenticationForm
+from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.views import redirect_to_login
 from django.urls import reverse, reverse_lazy
@@ -8,7 +8,7 @@ from django.views.decorators.http import require_GET
 
 class ManagementLoginView(auth_views.LoginView):
     template_name = "election/auth/login.html"
-    authentication_form = AdminAuthenticationForm
+    authentication_form = AuthenticationForm
     next_page = reverse_lazy("election:management_cycle_list")
 
 

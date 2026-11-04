@@ -356,6 +356,46 @@ class ManagementCycleViewTest(TestCase):
         hidden_election.refresh_from_db()
         self.assertEqual(hidden_election.status, Election.Status.DRAFT)
 
+    def test_non_staff_manager_is_scoped_to_assigned_cycle(self):
+        manager = get_user_model().objects.create_user(username="non-staff-manager")
+        group = Group.objects.create(name="非スタッフ管理委員")
+        manager.groups.add(group)
+        assigned = ElectionCycle.objects.create(year=2050, name="担当年度")
+        assigned.manager_groups.add(group)
+        hidden = ElectionCycle.objects.create(year=2051, name="担当外年度")
+        for cycle in (assigned, hidden):
+            Election.objects.create(
+                cycle=cycle, office="president", phase="preliminary",
+                start_at=self.now, end_at=self.now + timedelta(days=7),
+            )
+        self.client.force_login(manager)
+        response = self.client.get(reverse("election:management_cycle_list"))
+        self.assertContains(response, assigned.name)
+        self.assertNotContains(response, hidden.name)
+        self.assertEqual(self.client.get(reverse(
+            "election:management_cycle_detail", args=[assigned.year],
+        )).status_code, 200)
+        self.assertEqual(self.client.get(reverse(
+            "election:management_cycle_detail", args=[hidden.year],
+        )).status_code, 404)
+        self.assertEqual(self.client.get(reverse(
+            "election:management_cycle_create",
+        )).status_code, 403)
+        self.assertEqual(self.client.post(reverse(
+            "election:management_cycle_edit", args=[assigned.year],
+        ), {}).status_code, 403)
+        for cycle, expected_status in [(assigned, 302), (hidden, 403)]:
+            election = cycle.elections.first()
+            response = self.client.post(reverse(
+                "election:management_election_status", args=[cycle.year, election.pk],
+            ), {"status": Election.Status.OPEN})
+            self.assertEqual(response.status_code, expected_status)
+            election.refresh_from_db()
+            self.assertEqual(
+                election.status,
+                Election.Status.OPEN if cycle == assigned else Election.Status.DRAFT,
+            )
+
     def test_superuser_can_see_unassigned_cycles(self):
         cycle = ElectionCycle.objects.create(year=2046, name="未割当年度")
         response = self.client.get(reverse("election:management_cycle_list"))
@@ -372,7 +412,7 @@ class ManagementCycleViewTest(TestCase):
 
     def test_voter_management_marks_scoped_voter_as_paper(self):
         manager = get_user_model().objects.create_user(
-            username="paper-manager", password="password", is_staff=True
+            username="paper-manager", password="password", is_staff=False
         )
         group = Group.objects.create(name="2048年度選挙管理委員")
         manager.groups.add(group)
@@ -436,7 +476,7 @@ class ManagementCycleViewTest(TestCase):
 
     def test_candidate_roster_rules_and_manual_add_routes(self):
         manager = get_user_model().objects.create_user(
-            username="candidate-manager", password="password", is_staff=True
+            username="candidate-manager", password="password", is_staff=False
         )
         group = Group.objects.create(name="2047年度選挙管理委員")
         manager.groups.add(group)
