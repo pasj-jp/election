@@ -18,6 +18,7 @@ from .models import (
     CandidateStatusChange,
     Election,
     ElectionCycle,
+    LotteryDraw,
     MemberSnapshot,
     VoterParticipation,
 )
@@ -25,6 +26,7 @@ from .permissions import accessible_cycles, management_login_required, require_c
 from .responses import result_csv_response
 from .services.counting import commit_election_count, preview_election_count
 from .services.cycle_setup import setup_cycle
+from .services.lottery import execute_lottery, preview_lottery
 from .services.paper_voting import accept_paper_votes, create_paper_ballot
 from .services.result_export import build_result_export, result_csv_available
 
@@ -482,6 +484,7 @@ def management_count_preview(request, cycle_year, election_id):
     return render(request, "election/management/count_preview.html", {
         "cycle": election.cycle, "election": election, "preview": preview,
         "result_csv_available": result_csv_available(election),
+        "lotteries": election.lottery_draws.all(),
     })
 
 
@@ -544,3 +547,38 @@ def management_paper_ballot(request, cycle_year, election_id):
         "paper_voter_count": paper_voter_count,
         "can_register_paper_ballot": paper_ballot_count < paper_voter_count,
     })
+
+
+@management_login_required
+@require_GET
+def management_lottery_preview(request, cycle_year, election_id, lottery_id):
+    election = get_management_election(request, cycle_year, election_id)
+    lottery = get_object_or_404(LotteryDraw, pk=lottery_id, election=election)
+    preview = None
+    if lottery.executed_at is None:
+        try:
+            preview = preview_lottery(lottery)
+        except ValidationError as exc:
+            messages.error(request, "; ".join(exc.messages))
+    return render(request, "election/management/lottery_preview.html", {
+        "cycle": election.cycle, "election": election, "lottery": lottery,
+        "preview": preview,
+        "entries": lottery.candidates.select_related("candidate__member").order_by(
+            "candidate__member__member_no"
+        ),
+    })
+
+
+@management_login_required
+@require_POST
+def management_lottery_execute(request, cycle_year, election_id, lottery_id):
+    election = get_management_election(request, cycle_year, election_id)
+    lottery = get_object_or_404(LotteryDraw, pk=lottery_id, election=election)
+    try:
+        execute_lottery(lottery)
+    except ValidationError as exc:
+        messages.error(request, "; ".join(exc.messages))
+    else:
+        messages.success(request, "抽選を実行しました。")
+    return redirect("election:management_lottery_preview", cycle_year=cycle_year,
+                    election_id=election.pk, lottery_id=lottery.pk)

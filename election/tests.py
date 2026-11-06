@@ -10,7 +10,7 @@ from django.core.exceptions import ValidationError
 from django.core.management.base import CommandError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
-from django.test import SimpleTestCase, TestCase
+from django.test import Client, SimpleTestCase, TestCase
 from django.test.utils import CaptureQueriesContext
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -1496,6 +1496,73 @@ class CountPreviewTest(TestCase):
             response,
             "CSVを出力できるのは開票済みの選挙だけです。",
         )
+
+    def prepare_management_lottery(self):
+        ballot = Ballot.objects.create(election=self.election)
+        BallotChoice.objects.create(ballot=ballot, candidate=self.low_vote)
+        self.election.status = Election.Status.CLOSED
+        self.election.save(update_fields=["status"])
+        commit_election_count(self.election)
+        self.lottery = LotteryDraw.objects.get(election=self.election)
+        group = Group.objects.create(name="抽選担当")
+        self.cycle.manager_groups.add(group)
+        self.user.groups.add(group)
+        self.user.is_superuser = False
+        self.user.is_staff = False
+        self.user.save(update_fields=["is_superuser", "is_staff"])
+        args = [self.cycle.year, self.election.pk, self.lottery.pk]
+        self.preview_url = reverse("election:management_lottery_preview", args=args)
+        self.execute_url = reverse("election:management_lottery_execute", args=args)
+
+    def test_assigned_nonstaff_manager_can_preview_execute_and_view_result(self):
+        self.prepare_management_lottery()
+        result_url = reverse("election:management_count_preview", args=[
+            self.cycle.year, self.election.pk,
+        ])
+        page = self.client.get(result_url)
+        self.assertContains(page, self.preview_url)
+        self.assertNotContains(page, "結果CSVをダウンロード")
+        preview = self.client.get(self.preview_url)
+        self.assertContains(preview, "この条件で抽選を実行")
+        self.assertContains(preview, self.low_vote.member.member_no)
+        self.lottery.refresh_from_db()
+        self.assertIsNone(self.lottery.executed_at)
+        self.assertEqual(self.client.get(self.execute_url).status_code, 405)
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(self.user)
+        self.assertEqual(csrf_client.post(self.execute_url).status_code, 403)
+        result = self.client.post(self.execute_url, follow=True)
+        self.assertContains(result, "抽選は実行済みです")
+        self.assertNotContains(result, "この条件で抽選を実行")
+        self.assertEqual(self.election.candidates.filter(status=Candidate.Status.ELECTED).count(), 1)
+        self.assertEqual(self.election.candidates.filter(status=Candidate.Status.NOT_ELECTED).count(), 1)
+        self.lottery.refresh_from_db()
+        original = (self.lottery.seed, self.lottery.result_hash, self.lottery.executed_at)
+        self.assertContains(self.client.post(self.execute_url, follow=True), "すでに実行済み")
+        self.lottery.refresh_from_db()
+        self.assertEqual(original, (self.lottery.seed, self.lottery.result_hash, self.lottery.executed_at))
+        self.assertContains(self.client.get(result_url), "結果CSVをダウンロード")
+
+    def test_management_lottery_rejects_unassigned_anonymous_and_mismatched_requests(self):
+        self.prepare_management_lottery()
+        other = Election.objects.create(
+            cycle=self.cycle, office=Election.Office.PRESIDENT,
+            phase=Election.Phase.PRELIMINARY,
+            start_at=self.election.start_at, end_at=self.election.end_at,
+        )
+        for route, method in (("preview", self.client.get), ("execute", self.client.post)):
+            url = reverse(f"election:management_lottery_{route}", args=[
+                self.cycle.year, other.pk, self.lottery.pk,
+            ])
+            self.assertEqual(method(url).status_code, 404)
+        self.user.groups.clear()
+        self.assertEqual(self.client.get(self.preview_url).status_code, 403)
+        self.assertEqual(self.client.post(self.execute_url).status_code, 403)
+        self.client.logout()
+        self.assertEqual(self.client.get(self.preview_url).status_code, 302)
+        self.assertEqual(self.client.post(self.execute_url).status_code, 302)
+        self.lottery.refresh_from_db()
+        self.assertIsNone(self.lottery.executed_at)
 
     def test_tied_president_election_can_be_decided_by_lottery(self):
         ballot = Ballot.objects.create(election=self.election)

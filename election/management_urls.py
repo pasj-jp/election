@@ -6,6 +6,16 @@ from . import management_views
 
 urlpatterns = [
     path(
+        "<int:cycle_year>/elections/<int:election_id>/lotteries/<int:lottery_id>/",
+        management_views.management_lottery_preview,
+        name="management_lottery_preview",
+    ),
+    path(
+        "<int:cycle_year>/elections/<int:election_id>/lotteries/<int:lottery_id>/execute/",
+        management_views.management_lottery_execute,
+        name="management_lottery_execute",
+    ),
+    path(
         "",
         management_views.management_cycle_list,
         name="management_cycle_list",

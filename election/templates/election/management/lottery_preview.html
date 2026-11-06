@@ -1,0 +1,17 @@
+{% extends "election/management/base.html" %}
+{% block title %}{% if lottery.executed_at %}抽選結果{% else %}抽選プレビュー{% endif %}{% endblock %}
+{% block content %}
+<p><a href="{% url 'election:management_count_preview' cycle.year election.pk %}">← 選挙結果</a></p>
+<h1>{% if lottery.executed_at %}抽選結果{% else %}抽選プレビュー{% endif %}</h1>
+<p>{{ election }} ／ {{ lottery.get_category_display }}</p>
+<section class="periods"><div><strong>境界得票</strong><span>{{ lottery.vote_count }}票</span></div><div><strong>残議席</strong><span>{{ lottery.seats_remaining }}名</span></div></section>
+<div class="table-wrap"><table class="result-table"><thead><tr><th scope="col">会員番号</th><th scope="col">氏名</th><th scope="col">所属</th>{% if lottery.executed_at %}<th scope="col">抽選結果</th>{% endif %}</tr></thead><tbody>
+{% for entry in entries %}<tr><td>{{ entry.candidate.member.member_no }}</td><td>{{ entry.candidate.member.last_name }} {{ entry.candidate.member.first_name }}</td><td>{{ entry.candidate.member.affiliation }}</td>{% if lottery.executed_at %}<td>{% if entry.selected %}当選{% else %}落選{% endif %}</td>{% endif %}</tr>{% endfor %}
+</tbody></table></div>
+{% if lottery.executed_at %}
+<p>抽選は実行済みです。実行日時：{{ lottery.executed_at|date:"Y/m/d H:i:s" }}</p>
+{% elif preview %}
+<p class="warning">抽選対象 {{ preview.candidate_count }}名から {{ preview.seats_remaining }}名を選びます。実行すると結果が確定し、再実行はできません。</p>
+<form method="post" action="{% url 'election:management_lottery_execute' cycle.year election.pk lottery.pk %}">{% csrf_token %}<button class="button primary" type="submit">この条件で抽選を実行</button></form>
+{% endif %}
+{% endblock %}
