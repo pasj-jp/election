@@ -66,6 +66,7 @@ class Command(BaseCommand):
                 status__in=[
                     Candidate.Status.QUALIFIED,
                     Candidate.Status.ACCEPTED,
+                    Candidate.Status.DELEGATE_RECOMMENDED,
                     Candidate.Status.ELECTED,
                     Candidate.Status.NOT_ELECTED,
                     Candidate.Status.LOTTERY,

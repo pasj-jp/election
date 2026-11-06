@@ -1,5 +1,4 @@
 import csv
-import hashlib
 import secrets
 from pathlib import Path
 
@@ -15,12 +14,7 @@ from election.models import (
     ElectionCycle,
     VoterParticipation,
 )
-
-
-def hash_token(token):
-    return hashlib.sha256(
-        token.encode("utf-8")
-    ).hexdigest()
+from election.services.tokens import hash_token
 
 
 class Command(BaseCommand):

@@ -1,0 +1,13 @@
+<nav aria-label="ユーザーメニュー">
+    {% if request.user.is_authenticated %}
+        <span class="account-name">{% if request.user.last_name or request.user.first_name %}{{ request.user.last_name }}{% if request.user.last_name and request.user.first_name %} {% endif %}{{ request.user.first_name }}{% else %}{{ request.user.get_username }}{% endif %}</span>
+        <a href="{% url 'election:password_change' %}">パスワード変更</a>
+        {% if request.user.is_superuser %}
+            <a href="{% url 'admin:index' %}">管理サイト</a>
+        {% endif %}
+        <form action="{% url 'election:logout' %}" method="post">
+            {% csrf_token %}
+            <button>ログアウト</button>
+        </form>
+    {% endif %}
+</nav>

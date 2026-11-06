@@ -1,4 +1,5 @@
-from django.urls import path
+"""選挙システムのURL。公開パスとelection名前空間をここでまとめる。"""
+from django.urls import include, path
 
 from . import views
 
@@ -6,6 +7,8 @@ from . import views
 app_name = "election"
 
 urlpatterns = [
+    path("accounts/", include("election.auth_urls")),
+    path("management/", include("election.management_urls")),
     path(
         "",
         views.home,

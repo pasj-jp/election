@@ -1,5 +1,7 @@
 import uuid
 
+from django.conf import settings
+from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
@@ -12,6 +14,14 @@ class ElectionCycle(models.Model):
 
     year = models.PositiveIntegerField(unique=True)
     name = models.CharField(max_length=200)
+
+    manager_groups = models.ManyToManyField(
+        Group,
+        blank=True,
+        related_name="managed_election_cycles",
+        verbose_name="選挙管理委員グループ",
+        help_text="この年度を閲覧・編集できるグループを選択します。",
+    )
 
     preliminary_start_at = models.DateTimeField(
         null=True,
@@ -290,6 +300,7 @@ class Candidate(models.Model):
         ELIGIBLE = "eligible", "被選挙人"
         QUALIFIED = "qualified", "本選挙進出"
         ACCEPTED = "accepted", "立候補承諾"
+        DELEGATE_RECOMMENDED = "delegate_recommended", "代議員推薦"
         DECLINED = "declined", "辞退"
         DISQUALIFIED = "disqualified", "資格なし"
 
@@ -343,6 +354,7 @@ class Candidate(models.Model):
         labels = {
             self.Status.QUALIFIED: "(推)",
             self.Status.ACCEPTED: "(立)",
+            self.Status.DELEGATE_RECOMMENDED: "(代)",
         }
         return labels.get(self.status, "")
 
@@ -350,14 +362,50 @@ class Candidate(models.Model):
         super().clean()
         if (
             self.election_id
+            and self.status == self.Status.ACCEPTED
+            and self.election.office == Election.Office.PRESIDENT
+        ):
+            raise ValidationError({
+                "status": (
+                    "立候補承諾を選択できるのは"
+                    "代議員選挙（一般枠・企業枠）のみです。"
+                ),
+            })
+        if (
+            self.election_id
             and self.member_id
             and self.election.office == Election.Office.REPRESENTATIVE
-            and self.election.representative_category
-            != self.member.representative_category
+            and self.election.representative_category == Election.RepresentativeCategory.CORPORATE
+            and self.member.representative_category != MemberSnapshot.RepresentativeCategory.CORPORATE
         ):
             raise ValidationError({
                 "member": "選挙の代議員枠と会員の所属枠が一致していません。"
             })
+
+class CandidateStatusChange(models.Model):
+    """選挙管理委員による候補者ステータス変更の監査履歴。"""
+    candidate = models.ForeignKey(Candidate, null=True, blank=True, on_delete=models.SET_NULL, related_name="status_changes", verbose_name="候補者")
+    election = models.ForeignKey(Election, null=True, on_delete=models.PROTECT, verbose_name="選挙")
+    member = models.ForeignKey(MemberSnapshot, null=True, on_delete=models.PROTECT, verbose_name="会員")
+    previous_status = models.CharField(max_length=20, choices=Candidate.Status.choices, verbose_name="変更前")
+    new_status = models.CharField(max_length=20, choices=Candidate.Status.choices, verbose_name="変更後")
+    changed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="candidate_status_changes", verbose_name="変更者")
+    changed_at = models.DateTimeField(auto_now_add=True, verbose_name="変更日時")
+
+    class Meta:
+        verbose_name = "候補者ステータス変更履歴"
+        verbose_name_plural = "候補者ステータス変更履歴"
+        ordering = ["-changed_at"]
+
+    def __str__(self):
+        return f"{self.election}: {self.member}: {self.previous_status} → {self.new_status}"
+
+    def save(self, *args, **kwargs):
+        if self.candidate_id:
+            self.election_id = self.candidate.election_id
+            self.member_id = self.candidate.member_id
+        super().save(*args, **kwargs)
+
 
 class VoterParticipation(models.Model):
     """

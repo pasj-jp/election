@@ -1,0 +1,9 @@
+{% extends "election/auth/base.html" %}
+{% block auth_title %}選挙管理委員ログイン{% endblock %}
+{% block auth_content %}
+<h1 id="auth-heading">選挙管理委員ログイン</h1>
+<p>ユーザー名とパスワードを入力してください。</p><form method="post">{% csrf_token %}
+{% include "election/auth/fields.html" %}
+<input type="hidden" name="next" value="{{ next }}"><button class="button primary auth-submit" type="submit">ログイン</button>
+</form><p class="auth-links"><a href="{% url 'election:password_reset' %}">パスワードをお忘れですか？</a></p>
+{% endblock %}

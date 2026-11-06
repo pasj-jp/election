@@ -1,0 +1,128 @@
+:root{--ink:#183047;--muted:#64748b;--line:#d9e2ea;--bg:#f4f7fa;--primary:#136f63}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}a{color:#0c665c}.site-header{min-height:64px;padding:0 5vw;display:flex;align-items:center;justify-content:space-between;background:#fff;border-bottom:1px solid var(--line)}.brand{color:var(--ink);font-size:1.15rem;font-weight:750;text-decoration:none}.site-header nav,.site-header form,.actions{display:flex;align-items:center;gap:14px}.site-header button{border:0;background:none;color:#0c665c;cursor:pointer;font:inherit}.page{width:min(1180px,92vw);margin:38px auto 70px}h1{margin:0 0 8px;font-size:clamp(1.7rem,4vw,2.4rem)}h2{margin:5px 0 0;font-size:1.18rem}p{color:var(--muted)}.title-row{display:flex;justify-content:space-between;align-items:center;gap:24px;margin-bottom:24px}.button{display:inline-block;padding:9px 14px;border:1px solid #adc2c5;border-radius:8px;background:#fff;color:var(--ink);text-decoration:none;cursor:pointer;font:inherit}.button.primary{color:#fff;border-color:var(--primary);background:var(--primary)}.cycle-grid,.election-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}.cycle-card,.election-card,.form-card,.periods,.empty{background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 4px 15px #1c364c0d}.cycle-card{display:flex;min-height:180px;padding:24px;flex-direction:column;gap:9px;color:var(--muted);text-decoration:none}.cycle-card strong{color:var(--ink);font-size:1.2rem}.year{color:var(--primary);font-size:1.7rem;font-weight:800}.open-link{margin-top:auto;color:#0c665c}.empty{padding:24px}.periods{display:grid;grid-template-columns:1fr 1fr;margin-bottom:22px;padding:18px 22px;gap:18px}.periods div{display:flex;flex-direction:column;gap:5px}.periods span{color:var(--muted)}.election-card{padding:20px}.card-heading{display:flex;justify-content:space-between;gap:12px}.phase{color:var(--muted);font-size:.85rem}.status{align-self:flex-start;padding:5px 9px;border-radius:999px;background:#edf2f7;font-size:.8rem;white-space:nowrap}.status-open{background:#d9f5e9;color:#176344}.status-counted{background:#e5e5fa;color:#414184}.metrics{display:grid;grid-template-columns:repeat(3,1fr);margin:20px 0;border-block:1px solid var(--line)}.metrics div{padding:13px 4px}.metrics dt{color:var(--muted);font-size:.78rem}.metrics dd{margin:4px 0 0;font-size:1.15rem;font-weight:700}.status-form{display:flex;align-items:end;gap:8px}.status-form label{flex:1;color:var(--muted);font-size:.8rem}.status-form select{display:block;width:100%;margin-top:5px;padding:9px;border:1px solid var(--line);border-radius:7px;background:#fff}.detail-link{display:block;margin-top:18px}.form-card{max-width:680px;padding:28px}.field{margin:18px 0}.field label{display:block;margin-bottom:6px;font-weight:650}.field input{width:100%;padding:11px;border:1px solid #b9c8d4;border-radius:7px;font:inherit}.errorlist{color:#a42525}.message{margin-bottom:18px;padding:13px 16px;border-radius:8px;background:#e5eef5}.message.success{background:#daf1e6}.message.error{background:#f8dddd}@media(max-width:700px){.title-row{align-items:flex-start;flex-direction:column}.actions{flex-wrap:wrap}.periods{grid-template-columns:1fr}.site-header{padding:12px 4vw}.site-header nav>a{display:none}}
+
+.operation-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px;padding-top:18px;border-top:1px solid var(--line)}.form-card.wide{max-width:900px}.summary-list{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:22px 0}.summary-list div{padding:16px;background:var(--bg);border-radius:9px}.summary-list dt{color:var(--muted);font-size:.85rem}.summary-list dd{margin:5px 0 0;font-size:1.35rem;font-weight:750}.warning{padding:13px 16px;border-radius:8px;background:#fff1ce;color:#704e00}.table-wrap{overflow-x:auto;background:#fff;border:1px solid var(--line);border-radius:12px}.result-table{width:100%;border-collapse:collapse}.result-table th,.result-table td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--line)}.result-table th{background:#eef3f6}.field ul{list-style:none;padding:0}.field li{padding:5px 0}@media(max-width:700px){.summary-list{grid-template-columns:1fr}}
+
+.inline-form{display:flex;align-items:center;gap:8px}.inline-form select{min-width:130px;padding:9px;border:1px solid var(--line);border-radius:7px;background:#fff}.history{margin-top:28px}
+.muted{color:var(--muted);font-size:.85rem}
+.candidate-add{margin-top:30px;padding:22px;background:#fff;border:1px solid var(--line);border-radius:14px}.search-form{display:flex;gap:8px;margin:18px 0}.search-form input{flex:1;min-width:180px;padding:11px;border:1px solid #b9c8d4;border-radius:7px;font:inherit}.operation-links.compact{margin:0;padding:0;border:0}.button.danger{color:#9f2222;border-color:#e1aaaa}.button:disabled{opacity:.5;cursor:not-allowed}
+.card-controls{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:7px}.mini-action{padding:5px 8px;border:1px solid #b8cbcf;border-radius:7px;background:#fff;color:#0c665c;text-decoration:none;font-size:.78rem;white-space:nowrap}.mini-action.primary{background:var(--primary);border-color:var(--primary);color:#fff}.edit-dialog{width:min(680px,92vw);max-height:90vh;padding:0;border:0;border-radius:16px;box-shadow:0 24px 80px #102b3c55}.edit-dialog::backdrop{background:#132b3d88;backdrop-filter:blur(2px)}.edit-dialog>form,.dialog-heading{padding:22px 26px}.dialog-heading{display:flex;align-items:flex-start;justify-content:space-between;border-bottom:1px solid var(--line)}.dialog-close{border:0;background:none;color:var(--muted);font-size:1.8rem;line-height:1;cursor:pointer}.dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}.voter-filter{display:grid;grid-template-columns:1.5fr 1fr auto;align-items:end;gap:12px;margin:22px 0;padding:18px;background:#fff;border:1px solid var(--line);border-radius:12px}.voter-filter label{color:var(--muted);font-size:.85rem}.voter-filter select,.voter-filter input{display:block;width:100%;margin-top:6px;padding:10px;border:1px solid #b9c8d4;border-radius:7px;background:#fff;font:inherit}.section-heading{display:flex;justify-content:space-between;align-items:end;margin-top:28px}.sticky-actions{display:flex;justify-content:flex-end;position:sticky;bottom:12px;margin-top:14px;padding:12px;background:#f4f7fae8;border-radius:10px;backdrop-filter:blur(5px)}@media(max-width:700px){.card-heading{align-items:flex-start}.card-controls{max-width:60%}.voter-filter{grid-template-columns:1fr}.edit-dialog>form,.dialog-heading{padding:18px}}
+.icon-button{display:grid;place-items:center;width:42px;height:42px;padding:9px;border:1px solid #adc2c5;border-radius:10px;background:#fff;color:var(--ink);cursor:pointer}.icon-button:hover{background:#eaf1f3;border-color:#89a8ad}.icon-button svg{width:22px;height:22px;fill:currentColor}
+.election-grid{grid-template-columns:repeat(auto-fit,minmax(min(480px,100%),1fr))}.operation-links{display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:9px}.card-action{display:flex;align-items:center;justify-content:center;min-height:39px;padding:8px 10px;border:1px solid transparent;border-radius:9px;font-size:.82rem;font-weight:700;text-align:center;text-decoration:none;transition:transform .16s ease,box-shadow .16s ease,filter .16s ease}.card-action:hover{transform:translateY(-1px);box-shadow:0 5px 12px #18304720;filter:saturate(1.1)}.action-candidates{color:#285983;background:#e9f3fb;border-color:#c6dced}.action-voters{color:#5a467c;background:#f1ecfa;border-color:#d9ccef}.action-email{color:#176344;background:#e1f5ec;border-color:#bce4d3}.action-paper{color:#805619;background:#fff2d8;border-color:#efd7a8}.action-count{color:#fff;background:linear-gradient(135deg,#136f63,#0b8d7b);border-color:#136f63}.voter-filter.single{grid-template-columns:1fr auto}@media(max-width:600px){.operation-links{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* 選挙カードはデスクトップで2列×3行に固定する。 */
+.election-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.card-action,.action-candidates,.action-voters,.action-email,.action-paper,.action-count{color:#274457;background:linear-gradient(180deg,#fff,#f2f6f8);border-color:#c7d5dc;box-shadow:0 2px 5px #18304712}
+.card-action:hover{color:#15394c;background:linear-gradient(180deg,#fff,#e8f0f3);border-color:#94adb8;box-shadow:0 6px 14px #18304724}
+.status-form .button{min-width:72px;color:#fff;background:linear-gradient(135deg,#315f70,#183f50);border-color:#274e5e;font-weight:700;box-shadow:0 3px 8px #18304725;transition:transform .16s ease,box-shadow .16s ease,filter .16s ease}
+.status-form .button:hover{transform:translateY(-1px);box-shadow:0 6px 14px #18304735;filter:brightness(1.06)}
+.status-form .button:active{transform:translateY(0);box-shadow:0 2px 5px #18304725}
+@media(max-width:800px){.election-grid{grid-template-columns:1fr}}
+
+/* 選挙カードはデスクトップで3列×2行。 */
+.election-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.operation-links{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.card-action{min-width:0;min-height:37px;padding:7px 3px;font-size:.74rem;white-space:nowrap}
+@media(max-width:1050px){.election-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.election-grid{grid-template-columns:1fr}.operation-links{grid-template-columns:repeat(2,minmax(0,1fr))}.card-action{font-size:.82rem}}
+
+/* カード、入力欄、状態表示と同じ静かなトーンへ統一。 */
+.card-action,.action-candidates,.action-voters,.action-email,.action-paper,.action-count{color:var(--ink);background:#f8fafb;border:1px solid var(--line);border-radius:8px;box-shadow:none;font-weight:600;transition:background-color .15s ease,border-color .15s ease,color .15s ease}
+.card-action:hover{color:#0c665c;background:#f0f5f5;border-color:#aac3c1;box-shadow:none;transform:none;filter:none}
+.card-action:focus-visible,.status-form .button:focus-visible,.icon-button:focus-visible{outline:3px solid #136f6330;outline-offset:2px}
+.status-form .button{min-width:72px;padding:9px 13px;color:#fff;background:var(--primary);border:1px solid var(--primary);border-radius:8px;font-weight:650;box-shadow:none;transition:background-color .15s ease,border-color .15s ease}
+.status-form .button:hover{background:#0f5f55;border-color:#0f5f55;box-shadow:none;transform:none;filter:none}
+.status-form .button:active{background:#0b5149;box-shadow:none;transform:none}
+.icon-button{border-color:var(--line);border-radius:8px;color:var(--muted);box-shadow:none}.icon-button:hover{color:#0c665c;background:#f0f5f5;border-color:#aac3c1}
+
+/* ドロップダウンと更新操作のサイズ、質感を統一。 */
+.status-form select,.inline-form select,.voter-filter select{height:36px;padding:7px 32px 7px 10px;color:var(--ink);background-color:#f8fafb;background-image:linear-gradient(45deg,transparent 50%,#718292 50%),linear-gradient(135deg,#718292 50%,transparent 50%);background-position:calc(100% - 15px) 15px,calc(100% - 10px) 15px;background-size:5px 5px,5px 5px;background-repeat:no-repeat;border:1px solid var(--line);border-radius:8px;box-shadow:none;font:inherit;font-size:.85rem;appearance:none;cursor:pointer;transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease}
+.status-form select:hover,.inline-form select:hover,.voter-filter select:hover{background-color:#f2f6f7;border-color:#b5c7cf}
+.status-form select:focus,.inline-form select:focus,.voter-filter select:focus{outline:0;background-color:#fff;border-color:#78a69f;box-shadow:0 0 0 3px #136f6318}
+.status-form .button{min-width:58px;height:36px;padding:7px 10px;font-size:.82rem;line-height:1}
+.action-result{color:var(--ink);background:#f8fafb;border-color:var(--line)}
+
+.candidate-add .result-table th:nth-child(2),.candidate-add .result-table td:nth-child(2){min-width:9rem;white-space:nowrap}.candidate-add .result-table th:last-child,.candidate-add .result-table td:last-child{min-width:24rem}.candidate-actions{display:flex;align-items:stretch;gap:10px}.candidate-actions form{display:flex;flex:1;margin:0}.candidate-action-button{width:100%;min-height:42px;padding:9px 14px;border:1px solid #9fc9c3;border-radius:9px;background:linear-gradient(180deg,#fff,#edf7f5);color:#125f56;font:inherit;font-size:.88rem;font-weight:700;line-height:1.25;cursor:pointer;box-shadow:0 2px 5px #18304712;transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease,transform .15s ease}.candidate-action-button:hover{border-color:#5da99f;background:#e5f4f1;box-shadow:0 5px 12px #1830471c;transform:translateY(-1px)}.candidate-action-button:active{box-shadow:0 2px 5px #18304712;transform:none}.candidate-action-button:focus-visible{outline:3px solid #136f6330;outline-offset:2px}.candidate-action-button:disabled{opacity:.5;cursor:not-allowed;box-shadow:none;transform:none}@media(max-width:700px){.candidate-add .result-table th:last-child,.candidate-add .result-table td:last-child{min-width:15rem}.candidate-actions{flex-direction:column}}
+
+
+/* 管理画面の操作部品を共通のデザインシステムへ統一。 */
+:root{--button-radius:9px;--button-shadow:0 2px 6px #18304714;--button-shadow-hover:0 6px 16px #18304720;--primary-hover:#0f5f55;--danger:#a13b3b;--danger-bg:#fff7f7}
+.button,.candidate-action-button,.mini-action,.card-action,.icon-button{border-radius:var(--button-radius);font-weight:650;box-shadow:var(--button-shadow);transition:color .16s ease,background-color .16s ease,border-color .16s ease,box-shadow .16s ease,transform .16s ease}
+.button{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:9px 15px;border:1px solid #bfd0d4;background:linear-gradient(180deg,#fff,#f3f7f8);color:#274457;line-height:1.2}
+.button:hover{border-color:#8fabae;background:linear-gradient(180deg,#fff,#eaf2f3);color:#0c665c;box-shadow:var(--button-shadow-hover);transform:translateY(-1px)}
+.button:active{box-shadow:var(--button-shadow);transform:translateY(0)}
+.button.primary{border-color:var(--primary);background:linear-gradient(135deg,#177d70,var(--primary));color:#fff;box-shadow:0 3px 9px #136f6330}
+.button.primary:hover{border-color:var(--primary-hover);background:linear-gradient(135deg,#168071,var(--primary-hover));color:#fff;box-shadow:0 7px 17px #136f6338}
+.button.danger{border-color:#e4bcbc;background:var(--danger-bg);color:var(--danger);box-shadow:none}
+.button.danger:hover{border-color:#c97878;background:#fdeaea;color:#872929;box-shadow:0 5px 13px #a13b3b1c}
+.button:focus-visible,.candidate-action-button:focus-visible,.mini-action:focus-visible,.card-action:focus-visible,.icon-button:focus-visible,.site-header button:focus-visible,.dialog-close:focus-visible{outline:3px solid #136f6330;outline-offset:2px}
+.button:disabled,.candidate-action-button:disabled{opacity:.48;cursor:not-allowed;box-shadow:none;transform:none}
+.inline-form .button,.search-form .button,.voter-filter .button,.status-form .button{min-height:36px;height:36px;padding:7px 12px;font-size:.84rem}
+.status-form .button{min-width:58px;color:#fff;background:linear-gradient(135deg,#177d70,var(--primary));border-color:var(--primary);box-shadow:0 2px 7px #136f6328}
+.status-form .button:hover{color:#fff;background:linear-gradient(135deg,#168071,var(--primary-hover));border-color:var(--primary-hover);box-shadow:0 5px 12px #136f6330;transform:translateY(-1px)}
+.candidate-action-button{border-color:#b5cecb;background:linear-gradient(180deg,#fff,#edf7f5);color:#125f56;box-shadow:var(--button-shadow)}
+.candidate-action-button:hover{border-color:#6faea6;background:linear-gradient(180deg,#fff,#e3f2ef);color:#0d574f;box-shadow:var(--button-shadow-hover)}
+.card-action{min-height:38px;border-color:#c8d6db;background:linear-gradient(180deg,#fff,#f3f7f8);color:#274457;box-shadow:var(--button-shadow)}
+.card-action:hover{border-color:#91adaf;background:linear-gradient(180deg,#fff,#eaf2f3);color:#0c665c;box-shadow:var(--button-shadow-hover);transform:translateY(-1px)}
+.mini-action{display:inline-flex;align-items:center;justify-content:center;min-height:31px;padding:6px 10px;border-color:#bfd0d4;background:linear-gradient(180deg,#fff,#f3f7f8);font-weight:650;box-shadow:var(--button-shadow)}
+.mini-action:hover{border-color:#8fabae;background:#eaf2f3;box-shadow:var(--button-shadow-hover);transform:translateY(-1px)}
+.mini-action.primary{border-color:var(--primary);background:linear-gradient(135deg,#177d70,var(--primary));color:#fff}
+.icon-button{border-color:#bfd0d4;background:linear-gradient(180deg,#fff,#f3f7f8);box-shadow:var(--button-shadow)}
+.icon-button:hover{border-color:#8fabae;background:#eaf2f3;box-shadow:var(--button-shadow-hover);transform:translateY(-1px)}
+.site-header form button{min-height:34px;padding:6px 11px;border:1px solid transparent;border-radius:var(--button-radius);font-weight:650;transition:background-color .16s ease,border-color .16s ease}
+.site-header form button:hover{border-color:#c8d8d7;background:#eff6f5}
+.dialog-close{display:grid;place-items:center;width:38px;height:38px;border:1px solid transparent;border-radius:var(--button-radius);transition:color .16s ease,background-color .16s ease,border-color .16s ease}
+.dialog-close:hover{border-color:#d2dee2;background:#f1f5f6;color:#0c665c}
+
+.confirm-dialog{width:min(480px,92vw)}.confirm-message{margin:2px 0 8px;color:var(--ink);font-size:1.05rem}.confirm-message strong{color:var(--primary);font-size:1.35rem}.confirm-note{margin:0;color:var(--muted);font-size:.88rem}
+
+.sent-button,.sent-button:hover{border-color:#53636d;background:#53636d;color:#fff;box-shadow:none;transform:none}
+
+.cycle-card{transition:background-color .15s ease,border-color .15s ease}
+.cycle-card:hover,.cycle-card:focus-visible{background:#edf6f4;border-color:#9fc9c3}
+.cycle-card:focus-visible{outline:3px solid #136f6330;outline-offset:2px}
+
+.candidate-roster-table{table-layout:fixed;min-width:60rem}
+.candidate-roster-table th:nth-child(1){width:7rem}
+.candidate-roster-table th:nth-child(2){width:10rem}
+.candidate-roster-table td:nth-child(2),.candidate-roster-table td:nth-child(3){overflow-wrap:anywhere}
+.candidate-roster-table th:nth-child(4){width:11rem;white-space:nowrap}
+.candidate-roster-table td:nth-child(4){white-space:nowrap}
+.candidate-roster-table th:nth-child(5){width:14rem}
+.candidate-roster-table th:nth-child(6){width:10rem}
+.candidate-roster-table-final{min-width:70rem}
+
+/* 書面票の候補者は行全体で選択できる。 */
+.paper-candidates{min-width:0;margin:22px 0;padding:0;border:0}
+.paper-candidates legend{font-weight:700}
+.paper-candidate-list{display:grid;gap:10px}
+.paper-candidate{position:relative;display:block;cursor:pointer}
+.paper-candidate input[type="checkbox"]{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+.paper-candidate-card{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:60px;padding:15px 18px;border:2px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+.paper-candidate-name{min-width:0;overflow-wrap:anywhere;font-weight:650}
+.paper-candidate:hover .paper-candidate-card{border-color:#78a69f;background:#edf6f4}
+.paper-candidate input:checked + .paper-candidate-card{border-color:var(--primary);background:var(--primary);color:#fff}
+.paper-candidate input:focus-visible + .paper-candidate-card{outline:3px solid #183047;outline-offset:3px}
+
+.paper-ballot-card{margin-bottom:calc(100px + env(safe-area-inset-bottom,0px))}
+.paper-candidate-affiliation{min-width:0;overflow-wrap:anywhere;font-size:.9rem;text-align:right}
+.paper-ballot-submit{position:fixed;z-index:20;bottom:0;left:0;right:0;display:flex;justify-content:center;padding:14px 4vw calc(14px + env(safe-area-inset-bottom,0px));background:#fff;border-top:1px solid var(--line);box-shadow:0 -4px 16px #18304714}
+.paper-ballot-submit .button{width:min(100%,420px);min-height:48px}
+@media(max-width:600px){.paper-candidate-card{align-items:flex-start;flex-direction:column;gap:5px}.paper-candidate-affiliation{text-align:left}}
+
+.paper-ballot-submit{flex-direction:column;align-items:center;gap:8px}
+.paper-ballot-submit [role="status"]{font-size:.9rem;text-align:center}
+.paper-ballot-card{margin-bottom:calc(150px + env(safe-area-inset-bottom,0px))}
+
+/* 認証画面とユーザーメニュー。 */
+.auth-card{width:100%;max-width:500px;margin:60px auto;padding:34px}
+.auth-card h1{font-size:1.65rem;overflow-wrap:anywhere}
+.auth-card p{line-height:1.8}
+.auth-eyebrow{margin-bottom:18px;color:var(--primary);font-size:.85rem;font-weight:700}
+.auth-submit{width:100%;min-height:46px;margin-top:10px}
+.auth-links{text-align:center;margin-bottom:0}
+.auth-help{font-size:.85rem;color:var(--muted);line-height:1.6;margin-top:8px}
+.auth-help ul{padding-left:1.25rem;list-style:disc}
+.auth-card input:focus-visible{outline:3px solid #136f6330;outline-offset:2px;border-color:var(--primary)}
+.account-name{font-weight:650;overflow-wrap:anywhere}
+.site-header{gap:18px}.site-header nav{flex-wrap:wrap;justify-content:flex-end}.site-header form{margin:0}
+@media(max-width:700px){.site-header{align-items:flex-start;flex-direction:column}.site-header nav{justify-content:flex-start;gap:12px}.site-header nav>a{display:inline}.auth-card{margin:20px auto;padding:24px}.account-name{max-width:100%}}

@@ -1,20 +1,18 @@
-import hashlib
-import hmac
-import random
+"""投票者向けの画面と投票セッション処理。"""
 
-from django.conf import settings
 from django.db import transaction
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
-from .models import (
-    Ballot,
-    BallotChoice,
-    Candidate,
-    Election,
-    VoterParticipation,
+from .models import Ballot, BallotChoice, Candidate, VoterParticipation
+from .services.tokens import hash_token
+from .services.voting import (
+    deterministic_shuffle,
+    get_valid_candidate_statuses,
+    should_show_candidate_route_labels,
+    validate_vote,
 )
 
 
@@ -23,70 +21,8 @@ def home(request):
     return render(request, "election/home.html")
 
 
-def hash_token(token):
-    return hashlib.sha256(
-        token.encode("utf-8")
-    ).hexdigest()
-
-
 def election_is_open(election):
     return election.is_voting_open
-
-
-def get_valid_candidate_statuses(election):
-    """
-    選挙フェーズごとに、投票対象として有効な候補者statusを返す。
-    """
-
-    if election.phase == Election.Phase.FINAL:
-        return [
-            Candidate.Status.QUALIFIED,
-            Candidate.Status.ACCEPTED,
-        ]
-
-    return [
-        Candidate.Status.ELIGIBLE,
-    ]
-
-
-def should_show_candidate_route_labels(election):
-    return (
-        election.phase == Election.Phase.FINAL
-        and Candidate.objects.filter(
-            election=election,
-            status=Candidate.Status.ACCEPTED,
-        ).exists()
-    )
-
-
-def deterministic_shuffle(candidates, election, voter):
-    """
-    有権者ごとに異なる候補者順を生成する。
-    同じ有権者が再読み込みしても順番は同じ。
-    """
-
-    message = (
-        f"{election.pk}:"
-        f"{voter.member.member_no}"
-    ).encode("utf-8")
-
-    digest = hmac.new(
-        settings.SECRET_KEY.encode("utf-8"),
-        message,
-        hashlib.sha256,
-    ).digest()
-
-    seed = int.from_bytes(
-        digest,
-        byteorder="big",
-    )
-
-    rng = random.Random(seed)
-
-    candidates = list(candidates)
-    rng.shuffle(candidates)
-
-    return candidates
 
 
 def get_voter_from_session(request):
@@ -121,50 +57,6 @@ def get_voter_from_session(request):
 
     except VoterParticipation.DoesNotExist:
         return None
-
-
-def validate_vote(election, candidate_ids):
-    """
-    投票内容をサーバー側で検証する。
-    """
-
-    #
-    # 重複候補者を拒否
-    #
-    if len(candidate_ids) != len(set(candidate_ids)):
-        return (
-            "同じ候補者を重複して"
-            "選択することはできません。"
-        )
-
-    #
-    # 代議員
-    #
-    if election.office == Election.Office.REPRESENTATIVE:
-        if len(candidate_ids) == 0:
-            return "少なくとも1名を選択してください。"
-        if len(candidate_ids) > election.vote_limit:
-            return (
-                f"代議員は最大{election.vote_limit}名まで"
-                "選択できます。"
-            )
-
-        return None
-
-    #
-    # 会長本選挙
-    #
-    if election.office == Election.Office.PRESIDENT:
-
-        if len(candidate_ids) != 1:
-            return "会長候補者を1名選択してください。"
-
-        return None
-
-    return (
-        "この選挙形式の投票処理は"
-        "まだ実装されていません。"
-    )
 
 
 @require_GET

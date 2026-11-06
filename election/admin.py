@@ -1,13 +1,10 @@
-import csv
 from io import StringIO
 
 from django.contrib import admin, messages
-from django.core.exceptions import PermissionDenied
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db.models import Count, Q
-from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
 
@@ -20,6 +17,7 @@ from .forms import (
 from .models import (
     Ballot,
     Candidate,
+    CandidateStatusChange,
     Election,
     ElectionCycle,
     LotteryCandidate,
@@ -27,6 +25,9 @@ from .models import (
     MemberSnapshot,
     VoterParticipation,
 )
+
+from .permissions import accessible_cycles, can_access_cycle
+from .responses import result_csv_response
 
 from .services.counting import (
     commit_election_count,
@@ -40,7 +41,7 @@ from .services.lottery import (
 )
 from .services.member_import import MemberImportError, import_members
 from .services.paper_voting import accept_paper_votes, create_paper_ballot
-from .services.result_export import build_result_export
+from .services.result_export import build_result_export, result_csv_available
 
 
 admin.site.site_header = "加速器学会選挙システム"
@@ -79,6 +80,29 @@ def get_ordered_app_list(request, app_label=None):
 admin.site.get_app_list = get_ordered_app_list
 
 
+class CycleScopedAdminMixin:
+    """担当年度に属するオブジェクトだけを管理サイトへ公開する。"""
+
+    cycle_lookup = "cycle"
+
+    def get_object_cycle(self, obj):
+        cycle = obj
+        for part in self.cycle_lookup.split("__"):
+            cycle = getattr(cycle, part)
+        return cycle
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(**{
+            f"{self.cycle_lookup}__in": accessible_cycles(request.user),
+        })
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+
 @admin.register(ElectionCycle)
 class ElectionCycleAdmin(admin.ModelAdmin):
     form = ElectionCycleAdminForm
@@ -99,6 +123,26 @@ class ElectionCycleAdmin(admin.ModelAdmin):
     ordering = (
         "-year",
     )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(
+            pk__in=accessible_cycles(request.user).values("pk")
+        )
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly = list(super().get_readonly_fields(request, obj))
+        if not request.user.is_superuser:
+            readonly.append("manager_groups")
+        return readonly
 
     def get_urls(self):
         custom_urls = [
@@ -245,6 +289,12 @@ class ElectionAdmin(admin.ModelAdmin):
         "representative_category",
     )
 
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
     def has_add_permission(self, request):
         return False
 
@@ -285,7 +335,9 @@ class ElectionAdmin(admin.ModelAdmin):
         return super().response_add(request, obj, post_url_continue)
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
+        qs = super().get_queryset(request).filter(
+            cycle__in=accessible_cycles(request.user)
+        )
 
         return qs.annotate(
             _voter_count=Count(
@@ -378,15 +430,7 @@ class ElectionAdmin(admin.ModelAdmin):
                 object_id=election.pk,
             )
 
-        response = HttpResponse(content_type="text/csv; charset=utf-8")
-        response["Content-Disposition"] = (
-            f'attachment; filename="{export.filename}"'
-        )
-        response.write("\ufeff")
-        writer = csv.DictWriter(response, fieldnames=export.fieldnames)
-        writer.writeheader()
-        writer.writerows(export.rows)
-        return response
+        return result_csv_response(export)
 
     def paper_ballot_view(self, request, object_id):
         election = get_object_or_404(
@@ -576,9 +620,11 @@ class ElectionAdmin(admin.ModelAdmin):
         object_id,
     ):
         election = get_object_or_404(
-            Election,
+            self.get_queryset(request),
             pk=object_id,
         )
+        if not self.has_change_permission(request, election):
+            raise PermissionDenied
 
         try:
             preview = preview_election_count(election)
@@ -620,9 +666,11 @@ class ElectionAdmin(admin.ModelAdmin):
         object_id,
     ):
         election = get_object_or_404(
-            Election,
+            self.get_queryset(request),
             pk=object_id,
         )
+        if not self.has_change_permission(request, election):
+            raise PermissionDenied
 
         if request.method != "POST":
             return redirect(
@@ -758,14 +806,7 @@ class ElectionAdmin(admin.ModelAdmin):
                 ] = self.build_result_summary(
                     election
                 )
-                extra_context["result_csv_available"] = (
-                    election.phase == Election.Phase.FINAL
-                    and election.status == Election.Status.COUNTED
-                    and not LotteryDraw.objects.filter(
-                        election=election,
-                        executed_at__isnull=True,
-                    ).exists()
-                )
+                extra_context["result_csv_available"] = result_csv_available(election)
 
         return super().changeform_view(
             request,
@@ -975,7 +1016,7 @@ class ElectionAdmin(admin.ModelAdmin):
 
 
 @admin.register(MemberSnapshot)
-class MemberSnapshotAdmin(admin.ModelAdmin):
+class MemberSnapshotAdmin(CycleScopedAdminMixin, admin.ModelAdmin):
 
     change_list_template = (
         "admin/election/membersnapshot/change_list.html"
@@ -1028,7 +1069,11 @@ class MemberSnapshotAdmin(admin.ModelAdmin):
             request.POST or None,
             request.FILES or None,
         )
+        form.fields["cycle"].queryset = accessible_cycles(request.user)
         if request.method == "POST" and form.is_valid():
+            cycle = form.cleaned_data["cycle"]
+            if not can_access_cycle(request.user, cycle):
+                raise PermissionDenied
             uploaded_file = form.cleaned_data["csv_file"]
             try:
                 result = import_members(
@@ -1064,7 +1109,8 @@ class MemberSnapshotAdmin(admin.ModelAdmin):
 
 
 @admin.register(Candidate)
-class CandidateAdmin(admin.ModelAdmin):
+class CandidateAdmin(CycleScopedAdminMixin, admin.ModelAdmin):
+    cycle_lookup = "election__cycle"
 
     list_display = (
         "election",
@@ -1148,10 +1194,34 @@ class CandidateAdmin(admin.ModelAdmin):
         return obj._vote_count
 
 
-@admin.register(VoterParticipation)
-class VoterParticipationAdmin(admin.ModelAdmin):
+@admin.register(CandidateStatusChange)
+class CandidateStatusChangeAdmin(admin.ModelAdmin):
+    list_display = (
+        "changed_at", "election", "member", "candidate", "previous_status", "new_status", "changed_by",
+    )
+    list_filter = ("election__cycle", "previous_status", "new_status")
+    readonly_fields = (
+        "candidate", "election", "member", "previous_status", "new_status", "changed_by", "changed_at",
+    )
 
-    actions = ("accept_as_paper_vote",)
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+
+@admin.register(VoterParticipation)
+class VoterParticipationAdmin(CycleScopedAdminMixin, admin.ModelAdmin):
+    cycle_lookup = "election__cycle"
+
+    actions = ("accept_as_paper_vote", "resend_voting_emails")
 
     list_display = (
         "member",
@@ -1213,6 +1283,42 @@ class VoterParticipationAdmin(admin.ModelAdmin):
                 messages.WARNING,
             )
 
+    @admin.action(description="選択した有権者へ投票メールを再送する")
+    def resend_voting_emails(self, request, queryset):
+        token_marker = "EMAIL_TOKEN_MARKER"
+        voting_url = request.build_absolute_uri(
+            reverse("election:vote_entry", args=[token_marker])
+        )
+        base_url = voting_url.replace(token_marker + "/", "")
+        sent_count = 0
+        for voter in queryset.select_related("election__cycle", "member"):
+            try:
+                call_command(
+                    "resend_voting_email",
+                    cycle=voter.election.cycle.year,
+                    office=voter.election.office,
+                    phase=voter.election.phase,
+                    category=voter.election.representative_category or None,
+                    member=voter.member.member_no,
+                    base_url=base_url,
+                    stdout=StringIO(),
+                    stderr=StringIO(),
+                )
+            except CommandError as exc:
+                self.message_user(
+                    request,
+                    f"{voter.member}: {exc}",
+                    level=messages.ERROR,
+                )
+            else:
+                sent_count += 1
+        if sent_count:
+            self.message_user(
+                request,
+                f"投票メールを{sent_count}名に再送しました。",
+                level=messages.SUCCESS,
+            )
+
     @admin.display(
         description="Token",
         boolean=True,
@@ -1268,7 +1374,8 @@ class LotteryCandidateInline(admin.TabularInline):
 
 
 @admin.register(LotteryDraw)
-class LotteryDrawAdmin(admin.ModelAdmin):
+class LotteryDrawAdmin(CycleScopedAdminMixin, admin.ModelAdmin):
+    cycle_lookup = "election__cycle"
 
     change_form_template = (
         "admin/election/lotterydraw/change_form.html"
@@ -1333,9 +1440,11 @@ class LotteryDrawAdmin(admin.ModelAdmin):
         object_id,
     ):
         lottery = get_object_or_404(
-            LotteryDraw,
+            self.get_queryset(request),
             pk=object_id,
         )
+        if not self.has_change_permission(request, lottery):
+            raise PermissionDenied
 
         try:
             preview = preview_lottery(
@@ -1378,9 +1487,11 @@ class LotteryDrawAdmin(admin.ModelAdmin):
         object_id,
     ):
         lottery = get_object_or_404(
-            LotteryDraw,
+            self.get_queryset(request),
             pk=object_id,
         )
+        if not self.has_change_permission(request, lottery):
+            raise PermissionDenied
 
         if request.method != "POST":
             return redirect(
